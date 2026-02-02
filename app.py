@@ -11,7 +11,15 @@ from werkzeug.utils import secure_filename
 
 from openai import OpenAI
 from AnkiSync import invoke
-from utils.common import BASE_DIR, IMAGE_DIR, MEDIA_DIR, HTML_TAG_RE, IMG_SRC_RE
+from utils.common import (
+    BASE_DIR,
+    IMAGE_DIR,
+    MEDIA_DIR,
+    HTML_TAG_RE,
+    IMG_SRC_RE,
+    SOUND_TAG_RE,
+    NBSP_RE,
+)
 
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -149,6 +157,36 @@ def deck_images():
         return jsonify({"ok": False, "message": str(exc)}), 500
 
 
+@app.route("/api/deck-cards", methods=["GET"])
+def deck_cards():
+    deck = request.args.get("deck", "").strip()
+    if not deck:
+        return jsonify({"ok": False, "message": "Deck parameter is required."}), 400
+
+    try:
+        note_ids = invoke("findNotes", query=f'deck:"{deck}"')
+        if not note_ids:
+            return jsonify({"ok": True, "cards": []})
+        notes = invoke("notesInfo", notes=note_ids)
+        cards = []
+        for note_id, note in zip(note_ids, notes):
+            fields = note.get("fields", {})
+            front = clean_field_text((fields.get("Front") or {}).get("value", ""))
+            back = clean_field_text((fields.get("Back") or {}).get("value", ""))
+            romanized = clean_field_text((fields.get("Romanized") or {}).get("value", ""))
+            cards.append(
+                {
+                    "id": note_id,
+                    "front": front,
+                    "back": back,
+                    "romanized": romanized,
+                }
+            )
+        return jsonify({"ok": True, "cards": cards})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
 def estimate_sync_duration(card_count: int) -> Tuple[int, str]:
     if card_count <= 0:
         return 30, "About 30 seconds"
@@ -179,7 +217,9 @@ def get_deck_card_count(deckname: str) -> int:
 
 def clean_field_text(raw: str) -> str:
     raw = raw or ""
-    without_tags = HTML_TAG_RE.sub(" ", raw)
+    without_sound = SOUND_TAG_RE.sub(" ", raw)
+    without_nbsp = NBSP_RE.sub(" ", without_sound)
+    without_tags = HTML_TAG_RE.sub(" ", without_nbsp)
     return " ".join(without_tags.split())
 
 

@@ -14,6 +14,7 @@
             <button class="tab-button active" data-tab="sync">PDF ➜ Deck</button>
             <button class="tab-button" data-tab="audio">Deck Audio</button>
             <button class="tab-button" data-tab="images">Deck Images</button>
+            <button class="tab-button" data-tab="browser">Deck Browser</button>
             <button class="tab-button" data-tab="gallery">Image Gallery</button>
         </nav>
 
@@ -118,6 +119,40 @@
             <section class="status-panel">
                 <h2>Image Generation Log</h2>
                 <pre id="statusLogImages">Select a deck to begin.</pre>
+            </section>
+        </section>
+
+        <section id="tab-browser" class="tab-panel">
+            <div class="card">
+                <h2>Browse Deck Cards</h2>
+                <label for="browserDeckSelect">Deck</label>
+                <div class="deck-select-controls">
+                    <select id="browserDeckSelect">
+                        <option value="">Loading decks...</option>
+                    </select>
+                    <button id="refreshDecksBrowser" class="secondary-button">Refresh</button>
+                </div>
+                <button id="loadBrowser" class="accent-button" disabled>Load Deck</button>
+            </div>
+
+            <section class="status-panel">
+                <h2>Word Pairs</h2>
+                <p id="statusLogBrowser">Select a deck to view its cards.</p>
+                <div class="table-wrapper">
+                    <table class="deck-table">
+                        <thead>
+                            <tr>
+                                <th>Front</th>
+                                <th>Back</th>
+                            </tr>
+                        </thead>
+                        <tbody id="browserTableBody">
+                            <tr>
+                                <td colspan="2" class="empty-row">No deck selected.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </section>
         </section>
 

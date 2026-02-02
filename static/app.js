@@ -26,6 +26,11 @@ const refreshDecksGallery = document.getElementById("refreshDecksGallery");
 const loadGalleryButton = document.getElementById("loadGallery");
 const statusLogGallery = document.getElementById("statusLogGallery");
 const galleryGrid = document.getElementById("galleryGrid");
+const browserDeckSelect = document.getElementById("browserDeckSelect");
+const refreshDecksBrowser = document.getElementById("refreshDecksBrowser");
+const loadBrowserButton = document.getElementById("loadBrowser");
+const statusLogBrowser = document.getElementById("statusLogBrowser");
+const browserTableBody = document.getElementById("browserTableBody");
 
 const tabButtons = document.querySelectorAll(".tab-button");
 const tabPanels = document.querySelectorAll(".tab-panel");
@@ -171,7 +176,7 @@ function populateDeckSelect(select, decks) {
 }
 
 async function loadDecks() {
-    const selects = [audioDeckSelect, imageDeckSelect, galleryDeckSelect];
+    const selects = [audioDeckSelect, imageDeckSelect, galleryDeckSelect, browserDeckSelect];
     selects.forEach((select) => {
         if (select) {
             select.innerHTML = '<option value="">Loading decks...</option>';
@@ -181,6 +186,7 @@ async function loadDecks() {
     setStatus(statusLogAudio, "Fetching decks...");
     setStatus(statusLogImages, "Fetching decks...");
     setStatus(statusLogGallery, "Fetching decks...");
+    setStatus(statusLogBrowser, "Fetching decks...");
     try {
         const response = await fetch("/api/decks");
         const data = await response.json();
@@ -189,6 +195,7 @@ async function loadDecks() {
             setStatus(statusLogAudio, "Select a deck and model to begin.");
             setStatus(statusLogImages, "Select a deck and model to begin.");
             setStatus(statusLogGallery, "Select a deck to view images.");
+            setStatus(statusLogBrowser, "Select a deck to view its word pairs.");
         } else {
             const message = data.message || "No decks found.";
             selects.forEach((select) => {
@@ -199,6 +206,7 @@ async function loadDecks() {
             setStatus(statusLogAudio, message);
             setStatus(statusLogImages, message);
             setStatus(statusLogGallery, message);
+            setStatus(statusLogBrowser, message);
         }
     } catch (error) {
         selects.forEach((select) => {
@@ -209,6 +217,7 @@ async function loadDecks() {
         setStatus(statusLogAudio, `❌ Failed to fetch decks: ${error}`);
         setStatus(statusLogImages, `❌ Failed to fetch decks: ${error}`);
         setStatus(statusLogGallery, `❌ Failed to fetch decks: ${error}`);
+        setStatus(statusLogBrowser, `❌ Failed to fetch decks: ${error}`);
     } finally {
         selects.forEach((select) => {
             if (select) select.disabled = false;
@@ -216,6 +225,7 @@ async function loadDecks() {
         updateAudioControls();
         updateImageControls();
         updateGalleryControls();
+        updateBrowserControls();
     }
 }
 
@@ -236,6 +246,11 @@ function updateImageControls() {
 function updateGalleryControls() {
     if (!loadGalleryButton) return;
     loadGalleryButton.disabled = !Boolean(galleryDeckSelect?.value);
+}
+
+function updateBrowserControls() {
+    if (!loadBrowserButton) return;
+    loadBrowserButton.disabled = !Boolean(browserDeckSelect?.value);
 }
 
 syncButton.addEventListener("click", async () => {
@@ -389,6 +404,7 @@ generateImagesButton.addEventListener("click", generateImages);
 refreshDecksAudio.addEventListener("click", loadDecks);
 refreshDecksImages.addEventListener("click", loadDecks);
 refreshDecksGallery.addEventListener("click", loadDecks);
+refreshDecksBrowser.addEventListener("click", loadDecks);
 
 audioDeckSelect.addEventListener("change", updateAudioControls);
 audioModelSelect.addEventListener("change", updateAudioControls);
@@ -410,6 +426,16 @@ galleryDeckSelect.addEventListener("change", () => {
 });
 
 loadGalleryButton.addEventListener("click", loadGallery);
+browserDeckSelect.addEventListener("change", () => {
+    updateBrowserControls();
+    if (browserDeckSelect.value) {
+        loadBrowser();
+    } else if (browserTableBody) {
+        browserTableBody.innerHTML = `<tr><td colspan="3" class="empty-row">No deck selected.</td></tr>`;
+    }
+});
+
+loadBrowserButton.addEventListener("click", loadBrowser);
 
 function renderGallery(items) {
     if (!galleryGrid) return;
@@ -458,6 +484,51 @@ async function loadGallery() {
     }
 }
 
+function renderBrowserTable(cards) {
+    if (!browserTableBody) return;
+    if (!cards.length) {
+        browserTableBody.innerHTML = `<tr><td colspan="2" class="empty-row">No cards found in this deck.</td></tr>`;
+        return;
+    }
+    browserTableBody.innerHTML = "";
+    cards.forEach((card) => {
+        const tr = document.createElement("tr");
+        ["front", "back"].forEach((key) => {
+            const td = document.createElement("td");
+            td.textContent = card[key] || "";
+            tr.appendChild(td);
+        });
+        browserTableBody.appendChild(tr);
+    });
+}
+
+async function loadBrowser() {
+    const deck = browserDeckSelect?.value;
+    if (!deck) {
+        setStatus(statusLogBrowser, "Select a deck to view its cards.");
+        return;
+    }
+    setStatus(statusLogBrowser, `Loading cards for "${deck}"...`);
+    try {
+        const response = await fetch(`/api/deck-cards?deck=${encodeURIComponent(deck)}`);
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+            throw new Error(data.message || "Failed to fetch deck cards.");
+        }
+        renderBrowserTable(data.cards || []);
+        if ((data.cards || []).length) {
+            setStatus(statusLogBrowser, `Showing ${data.cards.length} card(s) in "${deck}".`);
+        } else {
+            setStatus(statusLogBrowser, `No cards found in "${deck}".`);
+        }
+    } catch (error) {
+        setStatus(statusLogBrowser, `❌ Failed to load deck: ${error}`);
+        if (browserTableBody) {
+            browserTableBody.innerHTML = `<tr><td colspan="3" class="empty-row">Unable to load cards.</td></tr>`;
+        }
+    }
+}
+
 loadDecks();
 loadModels("text", textModelSelect, "gpt-4.1-mini", statusLogSync, updateSyncButton);
 loadModels("audio", audioModelSelect, "gpt-4o-mini-tts", statusLogAudio, updateAudioControls);
@@ -468,3 +539,4 @@ updateSyncButton();
 updateAudioControls();
 updateImageControls();
 updateGalleryControls();
+updateBrowserControls();
