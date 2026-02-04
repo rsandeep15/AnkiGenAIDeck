@@ -79,6 +79,28 @@ class TestAnkiDeckToImages(unittest.TestCase):
         self.assertEqual(args[0], "updateNoteFields")
         self.assertIn("picture", kwargs["note"])
 
+    @patch("AnkiDeckToImages.generate_image")
+    @patch("AnkiDeckToImages.invoke")
+    @patch("AnkiDeckToImages.OpenAI")
+    def test_process_card_dry_run_skips_side_effects(
+        self,
+        mock_openai: MagicMock,
+        mock_invoke: MagicMock,
+        mock_generate: MagicMock,
+    ) -> None:
+        status, text, reason = images.process_card(
+            card=(42, "안녕", "hello"),
+            api_key="test",
+            image_model="gpt-image-1",
+            prompt_template="{text}",
+            skip_gating=False,
+            dry_run=True,
+        )
+        self.assertEqual(status, "dry_run")
+        self.assertIsNone(reason)
+        mock_generate.assert_not_called()
+        mock_invoke.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

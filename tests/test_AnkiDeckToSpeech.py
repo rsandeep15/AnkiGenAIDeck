@@ -38,6 +38,28 @@ class TestAnkiDeckToSpeech(unittest.TestCase):
     @patch("AnkiDeckToSpeech.invoke")
     @patch("AnkiDeckToSpeech.create_audio_file")
     @patch("AnkiDeckToSpeech.OpenAI")
+    def test_process_card_dry_run_skips_side_effects(
+        self,
+        mock_openai: MagicMock,
+        mock_create_audio: MagicMock,
+        mock_invoke: MagicMock,
+    ) -> None:
+        status, _, reason = speech.process_card(
+            card=(1, "안녕", "back"),
+            api_key="fake",
+            model="gpt-4o-mini-tts",
+            voice="onyx",
+            instructions="speak",
+            dry_run=True,
+        )
+        self.assertEqual(status, "dry_run")
+        self.assertIsNone(reason)
+        mock_create_audio.assert_not_called()
+        mock_invoke.assert_not_called()
+
+    @patch("AnkiDeckToSpeech.invoke")
+    @patch("AnkiDeckToSpeech.create_audio_file")
+    @patch("AnkiDeckToSpeech.OpenAI")
     def test_process_card_generates_audio_and_updates_note(
         self,
         mock_openai: MagicMock,
