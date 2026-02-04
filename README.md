@@ -31,6 +31,15 @@ export FLASK_APP=app.py
 
 Make sure Anki is running with the AnkiConnect add-on enabled. Generated media files are stored under `media/audio`, `media/images`, and processed PDFs are archived to `pdfs/`.
 
+### Pre-commit (optional)
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+Pre-commit will run basic sanity checks on staged files, plus `python -m compileall` and the unit tests in `tests/`.
+
 To launch the web UI, run `flask run` (or `python app.py`) after activating the virtualenv. The server will load credentials from `.env`.
 
 ### Web UI quickstart
