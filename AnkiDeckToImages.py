@@ -1,4 +1,5 @@
 import argparse
+import json
 import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
@@ -8,6 +9,12 @@ from typing import Any, List, Tuple
 from openai import OpenAI
 
 from AnkiSync import invoke
+from config import (
+    DEFAULT_IMAGE_MODEL,
+    DEFAULT_IMAGE_WORKERS,
+    GATING_PROMPT_ID,
+    GATING_PROMPT_VERSION,
+)
 from utils.common import (
     BASE_DIR,
     IMAGE_DIR,
@@ -16,9 +23,6 @@ from utils.common import (
     NBSP_RE,
 )
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-DEFAULT_MAX_WORKERS = 3
-GATING_PROMPT_ID = "pmpt_69194beaad7c819497842682bad97629040fc2c239b73233"
-GATING_PROMPT_VERSION = "4"
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("deck", help="Name of the Anki deck to process.")
     parser.add_argument(
         "--image-model",
-        default="gpt-image-1",
+        default=DEFAULT_IMAGE_MODEL,
         help="Image generation model to use (default: %(default)s).",
     )
     parser.add_argument(
@@ -42,13 +46,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--workers",
         type=int,
-        default=int(os.environ.get("ANKI_IMAGE_WORKERS", str(DEFAULT_MAX_WORKERS))),
+        default=int(os.environ.get("ANKI_IMAGE_WORKERS", str(DEFAULT_IMAGE_WORKERS))),
         help="Maximum number of concurrent generations (default: %(default)s).",
     )
     parser.add_argument(
         "--skip-gating",
         action="store_true",
         help="Generate images for every eligible card without the gating check.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List eligible cards and print a summary without writing to Anki.",
     )
     return parser.parse_args()
 
@@ -150,6 +159,7 @@ def process_card(
     image_model: str,
     prompt_template: str,
     skip_gating: bool,
+    dry_run: bool,
 ) -> Tuple[str, str, Any]:
     card_id, front_text, back_text = card
     local_client = OpenAI(api_key=api_key)
@@ -158,6 +168,8 @@ def process_card(
     cleaned_back = sanitize_text(back_without_images)
     if not cleaned_back:
         return ("skip", back_without_images, "No descriptive text after cleaning.")
+    if dry_run:
+        return ("dry_run", back_without_images, None)
 
     try:
         if not skip_gating:
@@ -231,7 +243,7 @@ def main() -> None:
         f"and {'skipping' if args.skip_gating else 'using prompt-configured'} gating."
     )
 
-    added = skipped = failed = 0
+    added = skipped = failed = dry_run_count = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
             executor.submit(
@@ -241,6 +253,7 @@ def main() -> None:
                 args.image_model,
                 prompt_template,
                 args.skip_gating,
+                args.dry_run,
             )
             for card in candidates
         ]
@@ -252,11 +265,24 @@ def main() -> None:
             elif status == "skip":
                 print(f"Skipping image for: {back_text} ({error})")
                 skipped += 1
+            elif status == "dry_run":
+                dry_run_count += 1
             else:
                 print(f"Failed image for: {back_text} ({error})")
                 failed += 1
 
     print(f"Completed image generation: {added} added, {skipped} skipped, {failed} failed.")
+    summary = {
+        "ok": failed == 0,
+        "dry_run": args.dry_run,
+        "deck": args.deck,
+        "candidates": len(candidates),
+        "added": added,
+        "skipped": skipped,
+        "failed": failed,
+        "dry_run_count": dry_run_count,
+    }
+    print(f"SUMMARY: {json.dumps(summary, ensure_ascii=False)}")
 
 
 if __name__ == "__main__":

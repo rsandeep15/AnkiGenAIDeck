@@ -1,4 +1,5 @@
 import argparse
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 from pathlib import Path
@@ -9,12 +10,12 @@ from openai import OpenAI
 
 from AnkiSync import invoke
 from utils.common import SOUND_TAG_RE, NBSP_RE
+from config import DEFAULT_TTS_MODEL, DEFAULT_TTS_WORKERS
 
 BASE_DIR = Path(__file__).resolve().parent
 MEDIA_DIR = BASE_DIR / "media"
 AUDIO_DIR = MEDIA_DIR / "audio"
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-DEFAULT_MAX_WORKERS = 10
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
@@ -28,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="gpt-4o-mini-tts",
+        default=DEFAULT_TTS_MODEL,
         help=(
             "OpenAI TTS model to use (default: %(default)s). "
             "Consider alternatives like 'gpt-4o-realtime-preview-tts' if available."
@@ -50,8 +51,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--workers",
         type=int,
-        default=int(os.environ.get("ANKI_AUDIO_WORKERS", str(DEFAULT_MAX_WORKERS))),
+        default=int(os.environ.get("ANKI_AUDIO_WORKERS", str(DEFAULT_TTS_WORKERS))),
         help="Maximum number of concurrent audio generations (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List eligible cards and print a summary without writing to Anki.",
     )
     return parser.parse_args()
 
@@ -113,6 +119,7 @@ def process_card(
     model: str,
     voice: str,
     instructions: str,
+    dry_run: bool,
 ) -> Tuple[str, str, Any]:
     card_id, front_text, back_text = card
     local_client = OpenAI(api_key=api_key)
@@ -120,6 +127,8 @@ def process_card(
     tts_input = prepare_text_for_tts(front_text)
     if not tts_input:
         return ("skip", front_text, "No speakable text after cleaning.")
+    if dry_run:
+        return ("dry_run", front_text, None)
     try:
         create_audio_file(
             local_client,
@@ -171,7 +180,7 @@ def main() -> None:
         f"Generating audio with up to {max_workers} worker(s) using model {args.model} and voice {args.voice}."
     )
 
-    added = skipped = failed = 0
+    added = skipped = failed = dry_run_count = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
             executor.submit(
@@ -181,6 +190,7 @@ def main() -> None:
                 args.model,
                 args.voice,
                 instructions,
+                args.dry_run,
             )
             for card in candidates
         ]
@@ -192,11 +202,24 @@ def main() -> None:
             elif status == "skip":
                 print(f"Skipping audio for: {front_text} ({error})")
                 skipped += 1
+            elif status == "dry_run":
+                dry_run_count += 1
             else:
                 print(f"Failed audio for: {front_text} ({error})")
                 failed += 1
 
     print(f"Completed audio generation: {added} added, {skipped} skipped, {failed} failed.")
+    summary = {
+        "ok": failed == 0,
+        "dry_run": args.dry_run,
+        "deck": args.deck,
+        "candidates": len(candidates),
+        "added": added,
+        "skipped": skipped,
+        "failed": failed,
+        "dry_run_count": dry_run_count,
+    }
+    print(f"SUMMARY: {json.dumps(summary, ensure_ascii=False)}")
 
 
 if __name__ == "__main__":

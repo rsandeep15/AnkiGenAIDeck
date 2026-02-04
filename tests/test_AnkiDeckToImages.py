@@ -39,6 +39,7 @@ class TestAnkiDeckToImages(unittest.TestCase):
             image_model="gpt-image-1",
             prompt_template="{text}",
             skip_gating=False,
+            dry_run=False,
         )
 
         self.assertEqual(status, "skip")
@@ -68,6 +69,7 @@ class TestAnkiDeckToImages(unittest.TestCase):
             image_model="gpt-image-1",
             prompt_template="{text}",
             skip_gating=False,
+            dry_run=False,
         )
 
         self.assertEqual(status, "added")

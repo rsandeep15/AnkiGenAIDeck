@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 
 from openai import OpenAI
 
-ANKI_CONNECT_URL = "http://127.0.0.1:8765"
+from config import ANKI_CONNECT_URL, DEFAULT_TEXT_MODEL
 
 # Function to create a file with the Files API
 def create_file(client: OpenAI, file_path: Path) -> str:
@@ -56,11 +56,16 @@ def parse_args():
     )
     parser.add_argument(
         "--model",
-        default="gpt-4.1-mini",
+        default=DEFAULT_TEXT_MODEL,
         help=(
             "OpenAI model used to extract vocabulary (default: %(default)s). "
             "Try faster tiers like 'gpt-4o-mini' or higher-accuracy models like 'gpt-4.1'."
         ),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Parse the PDF and print a summary without writing to Anki.",
     )
     romanized_group = parser.add_mutually_exclusive_group()
     romanized_group.add_argument(
@@ -193,8 +198,9 @@ def main():
     raw_output = get_response_text(response)
     word_pairs = parse_word_pairs(raw_output)
 
-    invoke('createDeck', deck=deckname)
-    print(f"Deck '{deckname}' created. Preparing notes...")
+    if not args.dry_run:
+        invoke('createDeck', deck=deckname)
+        print(f"Deck '{deckname}' created. Preparing notes...")
 
     notes: Dict[str, Dict[str, Any]] = {}
     for vocab_pair in word_pairs:
@@ -220,8 +226,28 @@ def main():
             continue
         notes[foreign_clean] = build_note(deckname, foreign_display, english_clean)
 
+    if args.dry_run:
+        print(f"{len(notes)} notes ready. Dry-run mode; no changes made.")
+        summary = {
+            "ok": True,
+            "dry_run": True,
+            "deck": deckname,
+            "notes_prepared": len(notes),
+            "notes_added": 0,
+        }
+        print(f"SUMMARY: {json.dumps(summary, ensure_ascii=False)}")
+        return
+
     invoke("addNotes", notes=list(notes.values()))
     print(f"Added {len(notes)} notes to deck '{deckname}'.")
+    summary = {
+        "ok": True,
+        "dry_run": False,
+        "deck": deckname,
+        "notes_prepared": len(notes),
+        "notes_added": len(notes),
+    }
+    print(f"SUMMARY: {json.dumps(summary, ensure_ascii=False)}")
     try:
         pdf_archive_dir = Path.cwd() / "pdfs"
         pdf_archive_dir.mkdir(exist_ok=True)

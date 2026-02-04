@@ -28,6 +28,7 @@ class TestAnkiDeckToSpeech(unittest.TestCase):
             model="gpt-4o-mini-tts",
             voice="onyx",
             instructions="speak",
+            dry_run=False,
         )
         self.assertEqual(status, "skip")
         self.assertIn("No speakable text", reason)
@@ -53,6 +54,7 @@ class TestAnkiDeckToSpeech(unittest.TestCase):
             model="gpt",
             voice="onyx",
             instructions="speak",
+            dry_run=False,
         )
 
         self.assertEqual(status, "added")
