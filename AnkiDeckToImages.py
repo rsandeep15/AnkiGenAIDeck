@@ -60,7 +60,8 @@ def load_api_key() -> str:
 
 
 def get_candidate_cards(deckname: str) -> List[Tuple[int, str, str]]:
-    cards = invoke("findNotes", query=f"deck:{deckname}")
+    # Quote deck name to handle spaces/special characters like '&'
+    cards = invoke("findNotes", query=f'deck:"{deckname}"')
     if not cards:
         return []
     notes_info = invoke("notesInfo", notes=cards)

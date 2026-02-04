@@ -209,7 +209,8 @@ def estimate_media_duration(card_count: int, per_card_seconds: float) -> Tuple[i
 
 def get_deck_card_count(deckname: str) -> int:
     try:
-        cards = invoke("findNotes", query=f"deck:{deckname}")
+        # Quote deck name to handle spaces/special characters like '&'
+        cards = invoke("findNotes", query=f'deck:"{deckname}"')
         return len(cards)
     except Exception:
         return 0
