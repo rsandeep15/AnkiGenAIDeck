@@ -151,7 +151,7 @@ def build_note(deckname: str, front: str, back: str) -> Dict[str, Any]:
     }
 
 
-def main(): 
+def main():
     """
     Given a PDF file, this script converts it to a list of English word to foreign word pairs.
     The pairs are then added to an Anki deck as flashcards.

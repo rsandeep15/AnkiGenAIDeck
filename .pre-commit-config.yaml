@@ -11,12 +11,12 @@ repos:
     hooks:
       - id: python-compileall
         name: python -m compileall
-        entry: python3 -m compileall .
+        entry: /Users/sandeepr/Documents/AnkiImageToDeck/.venv/bin/python -m compileall .
         language: system
         pass_filenames: false
 
       - id: python-unittest
         name: python -m unittest
-        entry: python3 -m unittest discover -s tests -p "test_*.py"
+        entry: /Users/sandeepr/Documents/AnkiImageToDeck/.venv/bin/python -m unittest discover -s tests -p "test_*.py"
         language: system
         pass_filenames: false
