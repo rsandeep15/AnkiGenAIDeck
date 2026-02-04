@@ -8,7 +8,7 @@ from typing import Any, List, Tuple
 
 from openai import OpenAI
 
-from AnkiSync import invoke
+from utils.anki_connect import invoke
 from config import (
     DEFAULT_IMAGE_MODEL,
     DEFAULT_IMAGE_WORKERS,
@@ -233,6 +233,23 @@ def main() -> None:
     candidates = get_candidate_cards(args.deck)
     if not candidates:
         print(f"No cards eligible for image generation in deck '{args.deck}'.")
+        return
+
+    if args.dry_run:
+        print("Dry-run mode; no images will be generated.")
+        for card_id, front_text, back_text in candidates[:10]:
+            print(f"- {front_text} — {back_text}")
+        summary = {
+            "ok": True,
+            "dry_run": True,
+            "deck": args.deck,
+            "candidates": len(candidates),
+            "added": 0,
+            "skipped": 0,
+            "failed": 0,
+            "dry_run_count": len(candidates),
+        }
+        print(f"SUMMARY: {json.dumps(summary, ensure_ascii=False)}")
         return
 
     worker_limit = max(1, args.workers)

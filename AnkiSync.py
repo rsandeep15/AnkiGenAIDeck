@@ -4,13 +4,12 @@ import os
 from pathlib import Path
 import sys
 import shutil
-import urllib.error
-import urllib.request
 from typing import Any, Dict, List
 
 from openai import OpenAI
 
-from config import ANKI_CONNECT_URL, DEFAULT_TEXT_MODEL
+from config import DEFAULT_TEXT_MODEL
+from utils.anki_connect import invoke
 
 # Function to create a file with the Files API
 def create_file(client: OpenAI, file_path: Path) -> str:
@@ -24,25 +23,6 @@ def create_file(client: OpenAI, file_path: Path) -> str:
 
 def request(action: str, **params: Any) -> Dict[str, Any]:
     return {"action": action, "params": params, "version": 6}
-
-
-def invoke(action: str, **params: Any) -> Any:
-    request_json = json.dumps(request(action, **params)).encode("utf-8")
-    req = urllib.request.Request(ANKI_CONNECT_URL, request_json)
-    try:
-        with urllib.request.urlopen(req) as response_handle:
-            response = json.load(response_handle)
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Failed to reach AnkiConnect at {ANKI_CONNECT_URL}: {exc}") from exc
-    if len(response) != 2:
-        raise Exception('response has an unexpected number of fields')
-    if 'error' not in response:
-        raise Exception('response is missing required error field')
-    if 'result' not in response:
-        raise Exception('response is missing required result field')
-    if response['error'] is not None:
-        raise Exception(response['error'])
-    return response['result']
 
 
 def parse_args():
@@ -228,6 +208,13 @@ def main():
 
     if args.dry_run:
         print(f"{len(notes)} notes ready. Dry-run mode; no changes made.")
+        sample = list(notes.values())[:10]
+        if sample:
+            print("Sample notes:")
+            for note in sample:
+                front = note["fields"]["Front"]
+                back = note["fields"]["Back"]
+                print(f"- {front} — {back}")
         summary = {
             "ok": True,
             "dry_run": True,

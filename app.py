@@ -10,7 +10,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory,
 from werkzeug.utils import secure_filename
 
 from openai import OpenAI
-from AnkiSync import invoke
+from utils.anki_connect import invoke
 from utils.common import (
     BASE_DIR,
     IMAGE_DIR,
