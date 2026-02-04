@@ -48,5 +48,47 @@ class TestDeckImagesRoute(unittest.TestCase):
         image_path.unlink()
 
 
+class TestAppUtilities(unittest.TestCase):
+    def test_clean_field_text_strips_sound_tags_and_html(self) -> None:
+        raw = "<div>안녕[sound:123.mp3]</div>&nbsp;&nbsp;하세요"
+        self.assertEqual(app.clean_field_text(raw), "안녕 하세요")
+
+    def test_estimate_sync_duration_bounds(self) -> None:
+        seconds, label = app.estimate_sync_duration(0)
+        self.assertGreaterEqual(seconds, 30)
+        self.assertIn("About", label)
+
+        seconds, label = app.estimate_sync_duration(1000)
+        self.assertLessEqual(seconds, 180)
+        self.assertIn("Roughly", label)
+
+    def test_estimate_media_duration_bounds(self) -> None:
+        seconds, label = app.estimate_media_duration(0, per_card_seconds=6.0)
+        self.assertGreaterEqual(seconds, 45)
+        self.assertIn("About", label)
+
+        seconds, label = app.estimate_media_duration(1000, per_card_seconds=6.0)
+        self.assertLessEqual(seconds, 1800)
+        self.assertIn("Roughly", label)
+
+    def test_allowed_file_accepts_pdf_only(self) -> None:
+        self.assertTrue(app.allowed_file("lesson.pdf"))
+        self.assertFalse(app.allowed_file("lesson.txt"))
+
+    def test_deck_cards_requires_deck_param(self) -> None:
+        client = app.app.test_client()
+        response = client.get("/api/deck-cards")
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertFalse(data["ok"])
+
+    def test_deck_images_requires_deck_param(self) -> None:
+        client = app.app.test_client()
+        response = client.get("/api/deck-images")
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertFalse(data["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -7,7 +7,11 @@ import AnkiDeckToSpeech as speech
 class TestAnkiDeckToSpeech(unittest.TestCase):
     def test_prepare_text_for_tts_strips_html_and_whitespace(self) -> None:
         raw = "<div>Hello&nbsp;&nbsp;world</div><br>!"
-        self.assertEqual(speech.prepare_text_for_tts(raw), "Hello&nbsp;&nbsp;world !")
+        self.assertEqual(speech.prepare_text_for_tts(raw), "Hello world !")
+
+    def test_prepare_text_for_tts_strips_sound_tags(self) -> None:
+        raw = "안녕[sound:123.mp3]"
+        self.assertEqual(speech.prepare_text_for_tts(raw), "안녕")
 
     @patch("AnkiDeckToSpeech.invoke")
     @patch("AnkiDeckToSpeech.create_audio_file")

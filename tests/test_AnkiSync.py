@@ -20,6 +20,23 @@ class TestAnkiSyncHelpers(unittest.TestCase):
         self.assertEqual(note["fields"]["Front"], "Front")
         self.assertEqual(note["fields"]["Back"], "Back")
 
+    def test_parse_word_pairs_rejects_non_list(self) -> None:
+        content = '{"english": "hi", "foreign": "안녕"}'
+        with self.assertRaises(RuntimeError):
+            sync.parse_word_pairs(content)
+
+    def test_parse_word_pairs_rejects_invalid_json(self) -> None:
+        with self.assertRaises(RuntimeError):
+            sync.parse_word_pairs('{"english": "hi"')
+
+    def test_build_prompt_includes_romanized_flag(self) -> None:
+        prompt = sync.build_prompt(include_romanized=True)
+        self.assertIn("romanized", prompt)
+        self.assertIn("Include a \"romanized\" key", prompt)
+
+        prompt = sync.build_prompt(include_romanized=False)
+        self.assertIn("Do not include romanization keys", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,14 @@ class TestAnkiDeckToImages(unittest.TestCase):
         self.assertNotIn("<img", result.lower())
         self.assertEqual(result.strip(), "<div>front</div><p></p>")
 
+    def test_sanitize_text_strips_html_and_collapses_space(self) -> None:
+        raw = "<div>Hello&nbsp;&nbsp;world</div><br>!"
+        self.assertEqual(images.sanitize_text(raw), "Hello world !")
+
+    def test_build_image_prompt_inserts_text(self) -> None:
+        template = "Draw: {text}"
+        self.assertEqual(images.build_image_prompt(template, "cat"), "Draw: cat")
+
     @patch("AnkiDeckToImages.invoke")
     @patch("AnkiDeckToImages.OpenAI")
     def test_process_card_removes_existing_image_when_gating_false(

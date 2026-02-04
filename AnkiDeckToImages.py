@@ -13,6 +13,7 @@ from utils.common import (
     IMAGE_DIR,
     HTML_TAG_RE,
     IMG_TAG_RE,
+    NBSP_RE,
 )
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_MAX_WORKERS = 3
@@ -75,7 +76,8 @@ def get_candidate_cards(deckname: str) -> List[Tuple[int, str, str]]:
 
 def sanitize_text(text: str) -> str:
     """Strip HTML tags and collapse whitespace for cleaner prompts."""
-    without_tags = HTML_TAG_RE.sub(" ", text)
+    without_nbsp = NBSP_RE.sub(" ", text)
+    without_tags = HTML_TAG_RE.sub(" ", without_nbsp)
     return " ".join(without_tags.split())
 
 

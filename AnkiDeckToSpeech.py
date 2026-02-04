@@ -8,6 +8,7 @@ from typing import Any, List, Tuple
 from openai import OpenAI
 
 from AnkiSync import invoke
+from utils.common import SOUND_TAG_RE, NBSP_RE
 
 BASE_DIR = Path(__file__).resolve().parent
 MEDIA_DIR = BASE_DIR / "media"
@@ -80,8 +81,10 @@ def get_candidate_cards(deckname: str) -> List[Tuple[int, str, str]]:
 
 
 def prepare_text_for_tts(text: str) -> str:
-    """Strip HTML tags and collapse whitespace for cleaner TTS input."""
-    without_tags = HTML_TAG_RE.sub(" ", text)
+    """Strip HTML/sound tags and collapse whitespace for cleaner TTS input."""
+    without_sound = SOUND_TAG_RE.sub(" ", text)
+    without_nbsp = NBSP_RE.sub(" ", without_sound)
+    without_tags = HTML_TAG_RE.sub(" ", without_nbsp)
     return " ".join(without_tags.split())
 
 def create_audio_file(
