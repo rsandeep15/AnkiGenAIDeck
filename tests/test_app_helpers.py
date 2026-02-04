@@ -44,6 +44,7 @@ class TestDeckImagesRoute(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(len(data["images"]), 1)
         self.assertTrue(data["images"][0]["image_url"].endswith(base_name))
+        self.assertEqual(data["images"][0]["front_text"], "")
 
         image_path.unlink()
 

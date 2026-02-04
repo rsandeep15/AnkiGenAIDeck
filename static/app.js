@@ -450,7 +450,7 @@ function renderGallery(items) {
             (item) => `
             <div class="image-card">
                 <img src="${item.image_url}" alt="${item.english}" loading="lazy" />
-                <div class="caption">${item.english || "(No English text)"}</div>
+                <div class="caption">${item.front_text || "(No Front text)"}</div>
             </div>`
         )
         .join("");

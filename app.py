@@ -148,7 +148,7 @@ def deck_images():
                 {
                     "card_id": note_id,
                     "english": clean_field_text(back),
-                    "korean": clean_field_text(front),
+                    "front_text": clean_field_text(front),
                     "image_url": url_for("serve_image_file", filename=local_path.name),
                 }
             )
