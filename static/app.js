@@ -21,6 +21,7 @@ const refreshDecksImages = document.getElementById("refreshDecksImages");
 const imageWorkerSelect = document.getElementById("imageWorkerSelect");
 const generateImagesButton = document.getElementById("generateImages");
 const statusLogImages = document.getElementById("statusLogImages");
+const imageCoverageBadge = document.getElementById("imageCoverageBadge");
 
 const galleryDeckSelect = document.getElementById("galleryDeckSelect");
 const refreshDecksGallery = document.getElementById("refreshDecksGallery");
@@ -37,6 +38,8 @@ const tabButtons = document.querySelectorAll(".tab-button");
 const tabPanels = document.querySelectorAll(".tab-panel");
 
 let selectedFile = null;
+let audioJobRunning = false;
+let imageJobRunning = false;
 
 function setStatus(element, message, append = false) {
     if (!element) return;
@@ -44,6 +47,15 @@ function setStatus(element, message, append = false) {
         element.textContent += `\n${message}`;
     } else {
         element.textContent = message;
+    }
+}
+
+function appendStatus(element, message) {
+    if (!element) return;
+    if (!element.textContent) {
+        element.textContent = message;
+    } else {
+        element.textContent += `\n${message}`;
     }
 }
 
@@ -75,6 +87,45 @@ function removeProgress(container) {
     if (container?.parentNode) {
         container.parentNode.removeChild(container);
     }
+}
+
+function streamJob(streamUrl, { onLog, onProgress, onDone, onError }) {
+    const source = new EventSource(streamUrl);
+    source.addEventListener("log", (event) => {
+        try {
+            const payload = JSON.parse(event.data);
+            if (payload?.message && onLog) {
+                onLog(payload.message);
+            }
+        } catch (error) {
+            console.error("Failed to parse log event", error);
+        }
+    });
+    source.addEventListener("progress", (event) => {
+        try {
+            const payload = JSON.parse(event.data);
+            if (onProgress && Number.isFinite(payload.current) && Number.isFinite(payload.total)) {
+                onProgress(payload.current, payload.total);
+            }
+        } catch (error) {
+            console.error("Failed to parse progress event", error);
+        }
+    });
+    source.addEventListener("done", (event) => {
+        try {
+            const payload = JSON.parse(event.data);
+            if (onDone) onDone(payload);
+        } catch (error) {
+            if (onError) onError(error);
+        } finally {
+            source.close();
+        }
+    });
+    source.onerror = (error) => {
+        source.close();
+        if (onError) onError(error);
+    };
+    return source;
 }
 
 function updateSyncButton() {
@@ -212,6 +263,7 @@ async function loadDecks() {
             setStatus(statusLogGallery, "Select a deck to view images.");
             setStatus(statusLogBrowser, "Select a deck to view its word pairs.");
             updateAudioCoverage();
+            updateImageCoverage();
         } else {
             const message = data.message || "No decks found.";
             selects.forEach((select) => {
@@ -249,14 +301,14 @@ function updateAudioControls() {
     const hasDeck = Boolean(audioDeckSelect?.value);
     const hasModel = Boolean(audioModelSelect?.value);
     const hasWorkers = Boolean(audioWorkerSelect?.value);
-    generateAudioButton.disabled = !(hasDeck && hasModel && hasWorkers);
+    generateAudioButton.disabled = audioJobRunning || !(hasDeck && hasModel && hasWorkers);
 }
 
 function updateImageControls() {
     const hasDeck = Boolean(imageDeckSelect?.value);
     const hasImageModel = Boolean(imageModelSelect?.value);
     const hasWorkers = Boolean(imageWorkerSelect?.value);
-    generateImagesButton.disabled = !(hasDeck && hasImageModel && hasWorkers);
+    generateImagesButton.disabled = imageJobRunning || !(hasDeck && hasImageModel && hasWorkers);
 }
 
 function updateGalleryControls() {
@@ -327,34 +379,60 @@ async function generateAudio() {
         return;
     }
 
-    setStatus(statusLogAudio, `Generating audio for deck "${deck}"...`);
+    setStatus(statusLogAudio, `Starting audio job for "${deck}"...`);
     const progressNode = showProgress(statusLogAudio, "Generating audio...");
-    generateAudioButton.disabled = true;
+    audioJobRunning = true;
+    updateAudioControls();
 
     try {
-        const response = await fetch("/generate/audio", {
+        const response = await fetch("/api/jobs/audio", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ deck, model, workers: Number(workers) }),
         });
         const data = await response.json();
-        if (data.ok) {
-            updateProgress(progressNode, "Audio complete!", data.eta_text);
-            const processed = data.items_processed !== undefined ? ` (cards processed: ${data.items_processed})` : "";
-            setStatus(
-                statusLogAudio,
-                `✅ ${data.message}${processed}\n\n${data.stdout}${data.stderr ? `\n${data.stderr}` : ""}`
-            );
-        } else {
-            setStatus(
-                statusLogAudio,
-                `⚠️ ${data.message}\n\n${data.stdout || ""}\n${data.stderr || ""}`
-            );
+        if (!data.ok) {
+            setStatus(statusLogAudio, `⚠️ ${data.message}`);
+            audioJobRunning = false;
+            updateAudioControls();
+            return;
         }
+
+        setStatus(statusLogAudio, "");
+        streamJob(data.stream_url, {
+            onLog: (message) => appendStatus(statusLogAudio, message),
+            onProgress: (current, total) => {
+                updateProgress(progressNode, `Progress: ${current}/${total}`);
+            },
+            onDone: (payload) => {
+                const ok = payload?.ok;
+                const summary = payload?.summary;
+                if (summary?.candidates !== undefined) {
+                    appendStatus(
+                        statusLogAudio,
+                        `Summary: ${summary.added || 0} added, ${summary.skipped || 0} skipped, ${summary.failed || 0} failed.`
+                    );
+                }
+                updateProgress(progressNode, ok ? "Audio complete!" : "Audio failed.");
+                if (!ok) {
+                    appendStatus(statusLogAudio, "⚠️ Audio generation failed.");
+                }
+                removeProgress(progressNode);
+                audioJobRunning = false;
+                updateAudioControls();
+                updateAudioCoverage();
+            },
+            onError: (error) => {
+                appendStatus(statusLogAudio, `⚠️ Stream error: ${error}`);
+                updateProgress(progressNode, "Audio stream closed.");
+                removeProgress(progressNode);
+                audioJobRunning = false;
+                updateAudioControls();
+            },
+        });
     } catch (error) {
         setStatus(statusLogAudio, `❌ Request failed: ${error}`);
-    } finally {
-        removeProgress(progressNode);
+        audioJobRunning = false;
         updateAudioControls();
     }
 }
@@ -376,9 +454,10 @@ async function generateImages() {
         return;
     }
 
-    setStatus(statusLogImages, `Generating images for deck "${deck}"...`);
+    setStatus(statusLogImages, `Starting image job for "${deck}"...`);
     const progressNode = showProgress(statusLogImages, "Generating images...");
-    generateImagesButton.disabled = true;
+    imageJobRunning = true;
+    updateImageControls();
 
     const payload = {
         deck,
@@ -388,29 +467,54 @@ async function generateImages() {
     };
 
     try {
-        const response = await fetch("/generate/images", {
+        const response = await fetch("/api/jobs/images", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
         });
         const data = await response.json();
-        if (data.ok) {
-            updateProgress(progressNode, "Images complete!", data.eta_text);
-            const processed = data.items_processed !== undefined ? ` (cards processed: ${data.items_processed})` : "";
-            setStatus(
-                statusLogImages,
-                `✅ ${data.message}${processed}\n\n${data.stdout}${data.stderr ? `\n${data.stderr}` : ""}`
-            );
-        } else {
-            setStatus(
-                statusLogImages,
-                `⚠️ ${data.message}\n\n${data.stdout || ""}\n${data.stderr || ""}`
-            );
+        if (!data.ok) {
+            setStatus(statusLogImages, `⚠️ ${data.message}`);
+            imageJobRunning = false;
+            updateImageControls();
+            return;
         }
+
+        setStatus(statusLogImages, "");
+        streamJob(data.stream_url, {
+            onLog: (message) => appendStatus(statusLogImages, message),
+            onProgress: (current, total) => {
+                updateProgress(progressNode, `Progress: ${current}/${total}`);
+            },
+            onDone: (payload) => {
+                const ok = payload?.ok;
+                const summary = payload?.summary;
+                if (summary?.candidates !== undefined) {
+                    appendStatus(
+                        statusLogImages,
+                        `Summary: ${summary.added || 0} added, ${summary.skipped || 0} skipped, ${summary.failed || 0} failed.`
+                    );
+                }
+                updateProgress(progressNode, ok ? "Images complete!" : "Image job failed.");
+                if (!ok) {
+                    appendStatus(statusLogImages, "⚠️ Image generation failed.");
+                }
+                removeProgress(progressNode);
+                imageJobRunning = false;
+                updateImageControls();
+                updateImageCoverage();
+            },
+            onError: (error) => {
+                appendStatus(statusLogImages, `⚠️ Stream error: ${error}`);
+                updateProgress(progressNode, "Image stream closed.");
+                removeProgress(progressNode);
+                imageJobRunning = false;
+                updateImageControls();
+            },
+        });
     } catch (error) {
         setStatus(statusLogImages, `❌ Request failed: ${error}`);
-    } finally {
-        removeProgress(progressNode);
+        imageJobRunning = false;
         updateImageControls();
     }
 }
@@ -431,6 +535,7 @@ imageDeckSelect.addEventListener("change", updateImageControls);
 imageModelSelect.addEventListener("change", updateImageControls);
 skipGatingToggle.addEventListener("change", updateImageControls);
 imageWorkerSelect.addEventListener("change", updateImageControls);
+imageDeckSelect.addEventListener("change", updateImageCoverage);
 
 galleryDeckSelect.addEventListener("change", () => {
     updateGalleryControls();
@@ -585,6 +690,7 @@ updateImageControls();
 updateGalleryControls();
 updateBrowserControls();
 updateAudioCoverage();
+updateImageCoverage();
 loadTabFromHash();
 
 async function updateAudioCoverage() {
@@ -605,5 +711,26 @@ async function updateAudioCoverage() {
         audioCoverageBadge.textContent = `Audio: ${withAudio}/${total} (${coverage}%)`;
     } catch (error) {
         audioCoverageBadge.textContent = "Audio: unavailable";
+    }
+}
+
+async function updateImageCoverage() {
+    if (!imageCoverageBadge || !imageDeckSelect?.value) {
+        if (imageCoverageBadge) imageCoverageBadge.textContent = "";
+        return;
+    }
+    const deck = imageDeckSelect.value;
+    try {
+        const response = await fetch(`/api/deck-image-stats?deck=${encodeURIComponent(deck)}`);
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+            throw new Error(data.message || "Failed to fetch image stats.");
+        }
+        const total = data.total ?? 0;
+        const withImages = data.with_images ?? 0;
+        const coverage = data.coverage ?? 0;
+        imageCoverageBadge.textContent = `Images: ${withImages}/${total} (${coverage}%)`;
+    } catch (error) {
+        imageCoverageBadge.textContent = "Images: unavailable";
     }
 }

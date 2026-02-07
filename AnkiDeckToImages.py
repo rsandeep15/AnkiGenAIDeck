@@ -261,6 +261,9 @@ def main() -> None:
     )
 
     added = skipped = failed = dry_run_count = 0
+    total = len(candidates)
+    processed = 0
+    print(f"PROGRESS 0/{total}", flush=True)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
             executor.submit(
@@ -287,6 +290,8 @@ def main() -> None:
             else:
                 print(f"Failed image for: {back_text} ({error})")
                 failed += 1
+            processed += 1
+            print(f"PROGRESS {processed}/{total}", flush=True)
 
     print(f"Completed image generation: {added} added, {skipped} skipped, {failed} failed.")
     summary = {

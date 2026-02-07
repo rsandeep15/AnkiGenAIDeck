@@ -77,6 +77,16 @@ class TestAppUtilities(unittest.TestCase):
         self.assertTrue(app.allowed_file("lesson.pdf"))
         self.assertFalse(app.allowed_file("lesson.txt"))
 
+    def test_parse_progress_line(self) -> None:
+        self.assertEqual(app.parse_progress_line("PROGRESS 3/10"), (3, 10))
+        self.assertEqual(app.parse_progress_line("PROGRESS  7 /  20"), (7, 20))
+        self.assertIsNone(app.parse_progress_line("PROGRESS seven/ten"))
+
+    def test_parse_summary_line(self) -> None:
+        summary = app.parse_summary_line('SUMMARY: {"ok": true, "added": 2}')
+        self.assertEqual(summary, {"ok": True, "added": 2})
+        self.assertIsNone(app.parse_summary_line("SUMMARY: not-json"))
+
     def test_deck_cards_requires_deck_param(self) -> None:
         client = app.app.test_client()
         response = client.get("/api/deck-cards")
@@ -87,6 +97,13 @@ class TestAppUtilities(unittest.TestCase):
     def test_deck_images_requires_deck_param(self) -> None:
         client = app.app.test_client()
         response = client.get("/api/deck-images")
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertFalse(data["ok"])
+
+    def test_deck_image_stats_requires_deck_param(self) -> None:
+        client = app.app.test_client()
+        response = client.get("/api/deck-image-stats")
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertFalse(data["ok"])

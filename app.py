@@ -1,13 +1,29 @@
 import base64
+import json
 import os
+import queue
+import re
 import subprocess
 import sys
+import threading
+import time
+import uuid
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Tuple
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, send_from_directory, url_for
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    render_template,
+    request,
+    send_from_directory,
+    stream_with_context,
+    url_for,
+)
 from werkzeug.utils import secure_filename
 
 from openai import OpenAI
@@ -30,6 +46,116 @@ ALLOWED_EXTENSIONS = {".pdf"}
 load_dotenv(BASE_DIR / ".env")
 
 app = Flask(__name__)
+PROGRESS_RE = re.compile(r"^PROGRESS\s+(\d+)\s*/\s*(\d+)\s*$")
+SUMMARY_RE = re.compile(r"^SUMMARY:\s*(\{.*\})\s*$")
+
+
+@dataclass
+class Job:
+    job_id: str
+    kind: str
+    created_at: float = field(default_factory=time.time)
+    status: str = "queued"
+    events: "queue.Queue[dict]" = field(default_factory=queue.Queue)
+    exit_code: int | None = None
+    summary: dict | None = None
+
+
+JOBS: dict[str, Job] = {}
+JOBS_LOCK = threading.Lock()
+
+
+def parse_progress_line(line: str) -> tuple[int, int] | None:
+    match = PROGRESS_RE.match(line.strip())
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def parse_summary_line(line: str) -> dict | None:
+    match = SUMMARY_RE.match(line.strip())
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
+
+
+def enqueue_event(job: Job, event: str, data: dict) -> None:
+    job.events.put({"event": event, "data": data})
+
+
+def run_script_stream(job: Job, script_path: Path, args: List[str]) -> None:
+    env = os.environ.copy()
+    if "OPENAI_API_KEY" not in env:
+        job.status = "failed"
+        enqueue_event(job, "log", {"message": "OPENAI_API_KEY is not set on the server."})
+        enqueue_event(job, "done", {"ok": False, "exit_code": None, "summary": None})
+        return
+
+    command = [sys.executable, str(script_path)] + args
+    job.status = "running"
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=env,
+            bufsize=1,
+        )
+    except Exception as exc:
+        job.status = "failed"
+        enqueue_event(job, "log", {"message": f"Failed to start process: {exc}"})
+        enqueue_event(job, "done", {"ok": False, "exit_code": None, "summary": None})
+        return
+
+    if process.stdout is None:
+        job.status = "failed"
+        enqueue_event(job, "log", {"message": "No stdout available for streaming."})
+        enqueue_event(job, "done", {"ok": False, "exit_code": None, "summary": None})
+        return
+
+    for raw_line in process.stdout:
+        line = raw_line.rstrip("\n")
+        if line:
+            progress = parse_progress_line(line)
+            if progress:
+                current, total = progress
+                enqueue_event(job, "progress", {"current": current, "total": total})
+                continue
+            enqueue_event(job, "log", {"message": line})
+            summary = parse_summary_line(line)
+            if summary:
+                job.summary = summary
+
+    process.wait()
+    job.exit_code = process.returncode
+    job.status = "completed" if process.returncode == 0 else "failed"
+    enqueue_event(
+        job,
+        "done",
+        {
+            "ok": process.returncode == 0,
+            "exit_code": process.returncode,
+            "summary": job.summary,
+        },
+    )
+
+
+def launch_job(kind: str, script_path: Path, args: List[str]) -> Job:
+    job_id = uuid.uuid4().hex
+    job = Job(job_id=job_id, kind=kind)
+    with JOBS_LOCK:
+        JOBS[job_id] = job
+    thread = threading.Thread(
+        target=run_script_stream,
+        args=(job, script_path, args),
+        daemon=True,
+    )
+    thread.start()
+    return job
 
 
 def allowed_file(filename: str) -> bool:
@@ -246,6 +372,39 @@ def deck_audio_stats():
         return jsonify({"ok": False, "message": str(exc)}), 500
 
 
+@app.route("/api/deck-image-stats", methods=["GET"])
+def deck_image_stats():
+    deck = request.args.get("deck", "").strip()
+    if not deck:
+        return jsonify({"ok": False, "message": "Deck parameter is required."}), 400
+
+    try:
+        total_notes = invoke("findNotes", query=f'deck:"{deck}"') or []
+        image_notes = set(
+            invoke("findNotes", query=f'deck:"{deck}" "image:"') or []
+        )
+        if not image_notes:
+            image_notes.update(
+                invoke("findNotes", query=f'deck:"{deck}" front:*<img*') or []
+            )
+            image_notes.update(
+                invoke("findNotes", query=f'deck:"{deck}" back:*<img*') or []
+            )
+        total = len(total_notes)
+        with_images = len(image_notes)
+        return jsonify(
+            {
+                "ok": True,
+                "deck": deck,
+                "total": total,
+                "with_images": with_images,
+                "coverage": round((with_images / total) * 100, 1) if total else 0.0,
+            }
+        )
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
 def estimate_sync_duration(card_count: int) -> Tuple[int, str]:
     if card_count <= 0:
         return 30, "About 30 seconds"
@@ -412,6 +571,38 @@ def generate_audio():
         return jsonify({"ok": False, "message": str(exc)}), 500
 
 
+@app.route("/api/jobs/audio", methods=["POST"])
+def start_audio_job():
+    data = request.get_json(silent=True) or {}
+    deck = data.get("deck", "").strip()
+    if not deck:
+        return jsonify({"ok": False, "message": "Deck name is required."}), 400
+
+    args = [deck]
+    model = data.get("model")
+    voice = data.get("voice")
+    workers = data.get("workers")
+    instructions = data.get("instructions")
+
+    if model:
+        args.extend(["--model", model])
+    if voice:
+        args.extend(["--voice", voice])
+    if instructions:
+        args.extend(["--instructions", instructions])
+    if workers:
+        args.extend(["--workers", str(workers)])
+
+    job = launch_job("audio", BASE_DIR / "AnkiDeckToSpeech.py", args)
+    return jsonify(
+        {
+            "ok": True,
+            "job_id": job.job_id,
+            "stream_url": url_for("stream_job", job_id=job.job_id),
+        }
+    )
+
+
 @app.route("/generate/images", methods=["POST"])
 def generate_images():
     data = request.get_json(silent=True) or {}
@@ -463,6 +654,64 @@ def generate_images():
         )
     except RuntimeError as exc:
         return jsonify({"ok": False, "message": str(exc)}), 500
+
+
+@app.route("/api/jobs/images", methods=["POST"])
+def start_image_job():
+    data = request.get_json(silent=True) or {}
+    deck = data.get("deck", "").strip()
+    if not deck:
+        return jsonify({"ok": False, "message": "Deck name is required."}), 400
+
+    args = [deck]
+    image_model = data.get("image_model")
+    prompt = data.get("prompt")
+    workers = data.get("workers")
+    skip_gating = data.get("skip_gating", False)
+
+    if image_model:
+        args.extend(["--image-model", image_model])
+    if prompt:
+        args.extend(["--prompt", prompt])
+    if workers:
+        args.extend(["--workers", str(workers)])
+    if skip_gating:
+        args.append("--skip-gating")
+
+    job = launch_job("images", BASE_DIR / "AnkiDeckToImages.py", args)
+    return jsonify(
+        {
+            "ok": True,
+            "job_id": job.job_id,
+            "stream_url": url_for("stream_job", job_id=job.job_id),
+        }
+    )
+
+
+@app.route("/api/jobs/<job_id>/stream", methods=["GET"])
+def stream_job(job_id: str):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if not job:
+        return jsonify({"ok": False, "message": "Job not found."}), 404
+
+    def generate():
+        yield "retry: 1000\n\n"
+        while True:
+            try:
+                event = job.events.get(timeout=1.0)
+                payload = json.dumps(event["data"], ensure_ascii=False)
+                yield f"event: {event['event']}\n"
+                yield f"data: {payload}\n\n"
+            except queue.Empty:
+                if job.status in {"completed", "failed"} and job.events.empty():
+                    break
+                yield ":\n\n"
+
+    response = Response(stream_with_context(generate()), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
 
 
 @app.route("/media/images/<path:filename>")
