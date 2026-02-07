@@ -45,6 +45,7 @@ class TestDeckImagesRoute(unittest.TestCase):
         self.assertEqual(len(data["images"]), 1)
         self.assertTrue(data["images"][0]["image_url"].endswith(base_name))
         self.assertEqual(data["images"][0]["front_text"], "")
+        self.assertEqual(data["images"][0]["sound_filename"], "")
 
         image_path.unlink()
 
@@ -86,6 +87,13 @@ class TestAppUtilities(unittest.TestCase):
     def test_deck_images_requires_deck_param(self) -> None:
         client = app.app.test_client()
         response = client.get("/api/deck-images")
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertFalse(data["ok"])
+
+    def test_media_endpoint_requires_filename(self) -> None:
+        client = app.app.test_client()
+        response = client.get("/api/media")
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertFalse(data["ok"])

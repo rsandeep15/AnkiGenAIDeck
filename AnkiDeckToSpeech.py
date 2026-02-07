@@ -77,8 +77,15 @@ def get_candidate_cards(deckname: str) -> List[Tuple[int, str, str]]:
     notes_info = invoke("notesInfo", notes=cards)
     candidates: List[Tuple[int, str, str]] = []
     for card_id, note in zip(cards, notes_info):
-        front_text = note["fields"]["Front"]["value"]
-        back_text = note["fields"]["Back"]["value"]
+        fields = note.get("fields", {})
+        front_field = fields.get("Front", {})
+        back_field = fields.get("Back", {})
+        front_text = front_field.get("value", "")
+        back_text = back_field.get("value", "")
+        if not front_text and not back_text:
+            continue
+        if not front_text:
+            front_text = back_text
         if "[sound" in front_text:
             print(f"Skipping audio for (already has sound): {front_text}")
             continue

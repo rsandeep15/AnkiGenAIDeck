@@ -451,12 +451,39 @@ function renderGallery(items) {
     galleryGrid.innerHTML = items
         .map(
             (item) => `
-            <div class="image-card">
+            <div class="image-card" data-sound="${item.sound_filename || ""}">
                 <img src="${item.image_url}" alt="${item.english}" loading="lazy" />
                 <div class="caption">${item.front_text || "(No Front text)"}</div>
             </div>`
         )
         .join("");
+}
+
+async function playAudioFromGallery(cardEl) {
+    const filename = cardEl?.dataset?.sound;
+    if (!filename) return;
+    try {
+        const response = await fetch(`/api/media?filename=${encodeURIComponent(filename)}`);
+        if (!response.ok) {
+            throw new Error("Audio not found.");
+        }
+        const buffer = await response.arrayBuffer();
+        const blob = new Blob([buffer], { type: response.headers.get("Content-Type") || "audio/mpeg" });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.addEventListener("ended", () => URL.revokeObjectURL(url));
+        audio.play();
+    } catch (error) {
+        console.error("Failed to play audio", error);
+    }
+}
+
+if (galleryGrid) {
+    galleryGrid.addEventListener("click", (event) => {
+        const card = event.target.closest(".image-card");
+        if (!card) return;
+        playAudioFromGallery(card);
+    });
 }
 
 async function loadGallery() {

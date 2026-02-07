@@ -1,3 +1,4 @@
+import base64
 import os
 import subprocess
 import sys
@@ -149,6 +150,7 @@ def deck_images():
                     "card_id": note_id,
                     "english": clean_field_text(back),
                     "front_text": clean_field_text(front),
+                    "sound_filename": extract_sound_filename(front) or extract_sound_filename(back),
                     "image_url": url_for("serve_image_file", filename=local_path.name),
                 }
             )
@@ -183,6 +185,29 @@ def deck_cards():
                 }
             )
         return jsonify({"ok": True, "cards": cards})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
+@app.route("/api/media", methods=["GET"])
+def media_file():
+    filename = request.args.get("filename", "").strip()
+    if not filename:
+        return jsonify({"ok": False, "message": "filename parameter is required."}), 400
+    try:
+        data = invoke("retrieveMediaFile", filename=filename)
+        if not data:
+            return jsonify({"ok": False, "message": "Media not found."}), 404
+        payload = base64.b64decode(data)
+        if filename.lower().endswith(".mp3"):
+            mimetype = "audio/mpeg"
+        elif filename.lower().endswith(".wav"):
+            mimetype = "audio/wav"
+        elif filename.lower().endswith(".ogg"):
+            mimetype = "audio/ogg"
+        else:
+            mimetype = "application/octet-stream"
+        return app.response_class(payload, mimetype=mimetype)
     except Exception as exc:
         return jsonify({"ok": False, "message": str(exc)}), 500
 
@@ -262,6 +287,16 @@ def extract_image_filename(html: str) -> str:
     match = IMG_SRC_RE.search(html or "")
     if match:
         return Path(match.group(1)).name
+    return ""
+
+
+def extract_sound_filename(text: str) -> str:
+    match = SOUND_TAG_RE.search(text or "")
+    if not match:
+        return ""
+    raw = match.group(0)
+    if raw.startswith("[sound:") and raw.endswith("]"):
+        return raw[len("[sound:"):-1]
     return ""
 
 
