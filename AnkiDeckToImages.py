@@ -214,7 +214,7 @@ def process_card(
                 "picture": [
                     {
                         "filename": filename,
-                        "fields": ["Front"],
+                        "fields": ["Back"],
                         "path": file_path.as_posix(),
                     }
                 ],
