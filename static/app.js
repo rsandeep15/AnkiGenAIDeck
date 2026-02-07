@@ -12,6 +12,7 @@ const refreshDecksAudio = document.getElementById("refreshDecksAudio");
 const audioWorkerSelect = document.getElementById("audioWorkerSelect");
 const generateAudioButton = document.getElementById("generateAudio");
 const statusLogAudio = document.getElementById("statusLogAudio");
+const audioCoverageBadge = document.getElementById("audioCoverageBadge");
 
 const imageDeckSelect = document.getElementById("imageDeckSelect");
 const imageModelSelect = document.getElementById("imageModelSelect");
@@ -196,6 +197,7 @@ async function loadDecks() {
             setStatus(statusLogImages, "Select a deck and model to begin.");
             setStatus(statusLogGallery, "Select a deck to view images.");
             setStatus(statusLogBrowser, "Select a deck to view its word pairs.");
+            updateAudioCoverage();
         } else {
             const message = data.message || "No decks found.";
             selects.forEach((select) => {
@@ -409,6 +411,7 @@ refreshDecksBrowser.addEventListener("click", loadDecks);
 audioDeckSelect.addEventListener("change", updateAudioControls);
 audioModelSelect.addEventListener("change", updateAudioControls);
 audioWorkerSelect.addEventListener("change", updateAudioControls);
+audioDeckSelect.addEventListener("change", updateAudioCoverage);
 
 imageDeckSelect.addEventListener("change", updateImageControls);
 imageModelSelect.addEventListener("change", updateImageControls);
@@ -540,3 +543,25 @@ updateAudioControls();
 updateImageControls();
 updateGalleryControls();
 updateBrowserControls();
+updateAudioCoverage();
+
+async function updateAudioCoverage() {
+    if (!audioCoverageBadge || !audioDeckSelect?.value) {
+        if (audioCoverageBadge) audioCoverageBadge.textContent = "";
+        return;
+    }
+    const deck = audioDeckSelect.value;
+    try {
+        const response = await fetch(`/api/deck-audio-stats?deck=${encodeURIComponent(deck)}`);
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+            throw new Error(data.message || "Failed to fetch audio stats.");
+        }
+        const total = data.total ?? 0;
+        const withAudio = data.with_audio ?? 0;
+        const coverage = data.coverage ?? 0;
+        audioCoverageBadge.textContent = `Audio: ${withAudio}/${total} (${coverage}%)`;
+    } catch (error) {
+        audioCoverageBadge.textContent = "Audio: unavailable";
+    }
+}

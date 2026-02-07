@@ -187,6 +187,40 @@ def deck_cards():
         return jsonify({"ok": False, "message": str(exc)}), 500
 
 
+@app.route("/api/deck-audio-stats", methods=["GET"])
+def deck_audio_stats():
+    deck = request.args.get("deck", "").strip()
+    if not deck:
+        return jsonify({"ok": False, "message": "Deck parameter is required."}), 400
+
+    try:
+        total_notes = invoke("findNotes", query=f'deck:"{deck}"') or []
+        audio_notes = set(
+            invoke("findNotes", query=f'deck:"{deck}" "sound:"') or []
+        )
+        if not audio_notes:
+            # Fallback to explicit field search if needed.
+            audio_notes.update(
+                invoke("findNotes", query=f'deck:"{deck}" front:*[sound:*') or []
+            )
+            audio_notes.update(
+                invoke("findNotes", query=f'deck:"{deck}" back:*[sound:*') or []
+            )
+        total = len(total_notes)
+        with_audio = len(audio_notes)
+        return jsonify(
+            {
+                "ok": True,
+                "deck": deck,
+                "total": total,
+                "with_audio": with_audio,
+                "coverage": round((with_audio / total) * 100, 1) if total else 0.0,
+            }
+        )
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
 def estimate_sync_duration(card_count: int) -> Tuple[int, str]:
     if card_count <= 0:
         return 30, "About 30 seconds"

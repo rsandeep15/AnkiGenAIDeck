@@ -257,6 +257,15 @@ button:not(:disabled):hover {
     background: #ea580c;
 }
 
+.coverage-badge {
+    font-size: 0.9rem;
+    color: #0f172a;
+    background: #e2e8f0;
+    padding: 0.35rem 0.6rem;
+    border-radius: 999px;
+    width: fit-content;
+}
+
 .table-wrapper {
     margin-top: 1rem;
     max-height: 420px;
