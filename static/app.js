@@ -95,18 +95,32 @@ function handleFiles(files) {
     updateSyncButton();
 }
 
-function switchTab(tabName) {
+function switchTab(tabName, { updateHash = true } = {}) {
     tabButtons.forEach((button) => {
         button.classList.toggle("active", button.dataset.tab === tabName);
     });
     tabPanels.forEach((panel) => {
         panel.classList.toggle("active", panel.id === `tab-${tabName}`);
     });
+    if (updateHash) {
+        window.location.hash = tabName;
+    }
 }
 
 tabButtons.forEach((button) => {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
 });
+
+function loadTabFromHash() {
+    const hash = window.location.hash.replace("#", "").trim();
+    if (!hash) return;
+    const exists = Array.from(tabButtons).some((button) => button.dataset.tab === hash);
+    if (exists) {
+        switchTab(hash, { updateHash: false });
+    }
+}
+
+window.addEventListener("hashchange", loadTabFromHash);
 
 dropZone.addEventListener("click", () => fileInput.click());
 
@@ -571,6 +585,7 @@ updateImageControls();
 updateGalleryControls();
 updateBrowserControls();
 updateAudioCoverage();
+loadTabFromHash();
 
 async function updateAudioCoverage() {
     if (!audioCoverageBadge || !audioDeckSelect?.value) {
