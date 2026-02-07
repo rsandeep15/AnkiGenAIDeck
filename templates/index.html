@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anki GenAI Sync</title>
+    <title>Anki Deck Studio</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
     <main class="container">
-        <h1>Anki GenAI Sync Control Panel</h1>
+        <h1>Anki Deck Studio</h1>
 
         <nav class="tabs">
             <button class="tab-button active" data-tab="sync">PDF ➜ Deck</button>
             <button class="tab-button" data-tab="audio">Deck Audio</button>
             <button class="tab-button" data-tab="images">Deck Images</button>
             <button class="tab-button" data-tab="browser">Deck Browser</button>
-            <button class="tab-button" data-tab="gallery">Image Gallery</button>
+            <button class="tab-button" data-tab="chat">Deck Chat</button>
         </nav>
 
         <section id="tab-sync" class="tab-panel active">
@@ -40,12 +40,10 @@
                 </div>
 
                 <button id="syncButton" disabled>Upload & Sync</button>
-            </div>
-
-            <section class="status-panel">
-                <h2>Status</h2>
+                <div class="card-divider"></div>
+                <h3 class="card-subtitle">Status</h3>
                 <pre id="statusLogSync">Waiting for upload...</pre>
-            </section>
+            </div>
         </section>
 
         <section id="tab-audio" class="tab-panel">
@@ -76,12 +74,10 @@
                 </select>
 
                 <button id="generateAudio" class="accent-button audio-button" disabled>Generate Audio</button>
-            </div>
-
-            <section class="status-panel">
-                <h2>Audio Generation Log</h2>
+                <div class="card-divider"></div>
+                <h3 class="card-subtitle">Audio Generation Log</h3>
                 <pre id="statusLogAudio">Select a deck to begin.</pre>
-            </section>
+            </div>
         </section>
 
         <section id="tab-images" class="tab-panel">
@@ -94,12 +90,18 @@
                     </select>
                     <button id="refreshDecksImages" class="secondary-button">Refresh</button>
                 </div>
-                <div id="imageCoverageBadge" class="coverage-badge"></div>
-
-                <label for="imageModelSelect">Image Model</label>
-                <select id="imageModelSelect">
-                    <option value="">Loading models...</option>
-                </select>
+                <div class="field-row">
+                    <div class="field">
+                        <label for="imageModelSelect">Image Model</label>
+                        <select id="imageModelSelect">
+                            <option value="">Loading models...</option>
+                        </select>
+                    </div>
+                    <div class="field compact">
+                        <label>Coverage</label>
+                        <div id="imageCoverageBadge" class="coverage-badge"></div>
+                    </div>
+                </div>
 
                 <label class="checkbox-row">
                     <input id="skipGatingToggle" type="checkbox">
@@ -116,11 +118,25 @@
                 </select>
 
                 <button id="generateImages" class="accent-button image-button" disabled>Generate Images</button>
+                <div class="card-divider"></div>
+                <h3 class="card-subtitle">Image Generation Log</h3>
+                <pre id="statusLogImages">Select a deck to begin.</pre>
             </div>
 
             <section class="status-panel">
-                <h2>Image Generation Log</h2>
-                <pre id="statusLogImages">Select a deck to begin.</pre>
+                <div class="panel-header">
+                    <h2>Deck Gallery</h2>
+                    <span class="panel-note">Auto-updates on deck selection</span>
+                </div>
+                <p id="statusLogGallery">Select a deck to view generated images.</p>
+                <div class="gallery-controls">
+                    <button id="galleryPrev" class="secondary-button" disabled>Prev</button>
+                    <span id="galleryPageInfo">Page 1</span>
+                    <button id="galleryNext" class="secondary-button" disabled>Next</button>
+                </div>
+                <div id="galleryGrid" class="image-grid empty">
+                    <p>No deck selected.</p>
+                </div>
             </section>
         </section>
 
@@ -158,27 +174,37 @@
             </section>
         </section>
 
-        <section id="tab-gallery" class="tab-panel">
+        <section id="tab-chat" class="tab-panel">
             <div class="card">
-                <h2>Browse Deck Images</h2>
-                <label for="galleryDeckSelect">Deck</label>
+                <h2>Ask Your Deck</h2>
+                <label for="chatDeckSelect">Deck</label>
                 <div class="deck-select-controls">
-                    <select id="galleryDeckSelect">
+                    <select id="chatDeckSelect">
                         <option value="">Loading decks...</option>
                     </select>
-                    <button id="refreshDecksGallery" class="secondary-button">Refresh</button>
+                    <button id="refreshDecksChat" class="secondary-button">Refresh</button>
                 </div>
-                <button id="loadGallery" class="accent-button" disabled>Load Gallery</button>
-            </div>
+                <label for="chatModelSelect">Response Model</label>
+                <select id="chatModelSelect">
+                    <option value="">Loading models...</option>
+                </select>
 
-            <section class="status-panel">
-                <h2>Deck Gallery</h2>
-                <p id="statusLogGallery">Select a deck to view generated images.</p>
-                <div id="galleryGrid" class="image-grid empty">
-                    <p>No deck selected.</p>
+                <h3 class="card-subtitle">Answer</h3>
+                <div id="chatThread" class="chat-thread">
+                    <div class="chat-message assistant">Select a deck and ask a question.</div>
                 </div>
-            </section>
+                <div id="chatModel" class="chat-meta"></div>
+                <div class="card-divider"></div>
+                <label for="chatQuestion">Question</label>
+                <textarea id="chatQuestion" rows="4" placeholder="Ask about vocab, themes, or usage..."></textarea>
+
+                <div class="chat-actions">
+                    <span class="chat-hint">Press Enter to send • Shift+Enter for a new line</span>
+                    <button id="chatAsk" class="accent-button" disabled>Send</button>
+                </div>
+            </div>
         </section>
+
     </main>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>

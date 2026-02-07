@@ -3,6 +3,7 @@ import json
 import os
 import queue
 import re
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -11,7 +12,7 @@ import uuid
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from flask import (
@@ -27,6 +28,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 from openai import OpenAI
+from config import OPENAI_STORE_RESPONSES
 from utils.anki_connect import invoke
 from utils.common import (
     BASE_DIR,
@@ -46,8 +48,11 @@ ALLOWED_EXTENSIONS = {".pdf"}
 load_dotenv(BASE_DIR / ".env")
 
 app = Flask(__name__)
+app.instance_path = os.path.join(BASE_DIR, "instance")
+os.makedirs(app.instance_path, exist_ok=True)
 PROGRESS_RE = re.compile(r"^PROGRESS\s+(\d+)\s*/\s*(\d+)\s*$")
 SUMMARY_RE = re.compile(r"^SUMMARY:\s*(\{.*\})\s*$")
+TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 
 
 @dataclass
@@ -57,22 +62,22 @@ class Job:
     created_at: float = field(default_factory=time.time)
     status: str = "queued"
     events: "queue.Queue[dict]" = field(default_factory=queue.Queue)
-    exit_code: int | None = None
-    summary: dict | None = None
+    exit_code: Optional[int] = None
+    summary: Optional[dict] = None
 
 
 JOBS: dict[str, Job] = {}
 JOBS_LOCK = threading.Lock()
 
 
-def parse_progress_line(line: str) -> tuple[int, int] | None:
+def parse_progress_line(line: str) -> Optional[Tuple[int, int]]:
     match = PROGRESS_RE.match(line.strip())
     if not match:
         return None
     return int(match.group(1)), int(match.group(2))
 
 
-def parse_summary_line(line: str) -> dict | None:
+def parse_summary_line(line: str) -> Optional[dict]:
     match = SUMMARY_RE.match(line.strip())
     if not match:
         return None
@@ -84,6 +89,99 @@ def parse_summary_line(line: str) -> dict | None:
 
 def enqueue_event(job: Job, event: str, data: dict) -> None:
     job.events.put({"event": event, "data": data})
+
+
+def get_chat_db_path() -> str:
+    return os.path.join(app.instance_path, "chat_logs.sqlite")
+
+
+def init_chat_db() -> None:
+    path = get_chat_db_path()
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                deck TEXT NOT NULL,
+                model TEXT,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                history_json TEXT
+            )
+            """
+        )
+        conn.commit()
+
+
+def log_chat_event(
+    *, deck: str, model: Optional[str], question: str, answer: str, history: Optional[list]
+) -> None:
+    init_chat_db()
+    payload = json.dumps(history or [], ensure_ascii=False)
+    with sqlite3.connect(get_chat_db_path()) as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_logs (created_at, deck, model, question, answer, history_json)
+            VALUES (datetime('now'), ?, ?, ?, ?, ?)
+            """,
+            (deck, model, question, answer, payload),
+        )
+        conn.commit()
+
+
+@app.route("/api/chat-logs/export", methods=["GET"])
+def export_chat_logs():
+    fmt = (request.args.get("format") or "jsonl").lower()
+    limit = request.args.get("limit")
+    try:
+        limit_val = int(limit) if limit else None
+    except ValueError:
+        return jsonify({"ok": False, "message": "Invalid limit."}), 400
+
+    init_chat_db()
+    with sqlite3.connect(get_chat_db_path()) as conn:
+        cursor = conn.cursor()
+        if limit_val:
+            cursor.execute(
+                "SELECT created_at, deck, model, question, answer, history_json FROM chat_logs ORDER BY id DESC LIMIT ?",
+                (limit_val,),
+            )
+        else:
+            cursor.execute(
+                "SELECT created_at, deck, model, question, answer, history_json FROM chat_logs ORDER BY id DESC"
+            )
+        rows = cursor.fetchall()
+
+    if fmt == "csv":
+        output = ["created_at,deck,model,question,answer,history_json"]
+        for created_at, deck, model, question, answer, history_json in rows:
+            output.append(
+                ",".join(
+                    [
+                        json.dumps(created_at, ensure_ascii=False),
+                        json.dumps(deck, ensure_ascii=False),
+                        json.dumps(model or "", ensure_ascii=False),
+                        json.dumps(question, ensure_ascii=False),
+                        json.dumps(answer, ensure_ascii=False),
+                        json.dumps(history_json or "", ensure_ascii=False),
+                    ]
+                )
+            )
+        return Response("\n".join(output), mimetype="text/csv")
+
+    lines = []
+    for created_at, deck, model, question, answer, history_json in rows:
+        record = {
+            "created_at": created_at,
+            "deck": deck,
+            "model": model,
+            "question": question,
+            "answer": answer,
+            "history": json.loads(history_json) if history_json else [],
+        }
+        lines.append(json.dumps(record, ensure_ascii=False))
+    return Response("\n".join(lines), mimetype="application/jsonl")
 
 
 def run_script_stream(job: Job, script_path: Path, args: List[str]) -> None:
@@ -199,29 +297,75 @@ def cached_model_ids() -> List[str]:
     return [getattr(model, "id", "") for model in data if getattr(model, "id", "")]
 
 
+def is_text_model(model_id: str) -> bool:
+    blocked = ("tts", "audio", "image", "embed", "embedding", "speech")
+    if not model_id.startswith(("gpt", "o")):
+        return False
+    return not any(token in model_id for token in blocked)
+
+
+def is_audio_model(model_id: str) -> bool:
+    return "tts" in model_id or model_id.endswith("-tts") or "audio" in model_id
+
+
+def is_image_model(model_id: str) -> bool:
+    return "image" in model_id or model_id.startswith("dall-e")
+
+
 def filter_models(kind: str) -> List[str]:
     kind = kind.lower()
     ids = cached_model_ids()
-
-    def is_text(model_id: str) -> bool:
-        blocked = ("tts", "audio", "image", "embed", "embedding", "speech")
-        if not model_id.startswith(("gpt", "o")):
-            return False
-        return not any(token in model_id for token in blocked)
-
-    def is_audio(model_id: str) -> bool:
-        return "tts" in model_id or model_id.endswith("-tts") or "audio" in model_id
-
-    def is_image(model_id: str) -> bool:
-        return "image" in model_id or model_id.startswith("dall-e")
+    popular_text = [
+        "gpt-5.2",
+        "gpt-5.2-mini",
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4o",
+        "gpt-4o-mini",
+    ]
 
     if kind == "text":
-        return sorted(filter(is_text, ids))
+        latest_like = [
+            model_id
+            for model_id in ids
+            if (
+                model_id.startswith("gpt-5")
+                or model_id.endswith("-latest")
+                or model_id.endswith("-latest-preview")
+            )
+            and is_text_model(model_id)
+        ]
+        ordered = []
+        for model_id in popular_text + latest_like:
+            if model_id in ids and model_id not in ordered:
+                ordered.append(model_id)
+        available = ordered
+        if available:
+            return available
+        return sorted(filter(is_text_model, ids))
     if kind == "audio":
-        return sorted(filter(is_audio, ids))
+        return sorted(filter(is_audio_model, ids))
     if kind == "image":
-        return sorted(filter(is_image, ids))
+        return sorted(filter(is_image_model, ids))
     raise ValueError("Unsupported model kind")
+
+
+def get_response_text(resp: Any) -> str:
+    text = getattr(resp, "output_text", None)
+    if text:
+        return text
+    output = getattr(resp, "output", None)
+    if not output:
+        return ""
+    parts: List[str] = []
+    for item in output:
+        for content_piece in getattr(item, "content", []):
+            maybe_text = getattr(content_piece, "text", None)
+            if maybe_text:
+                parts.append(maybe_text)
+    return "".join(parts)
 
 
 @app.route("/api/models/<kind>", methods=["GET"])
@@ -241,16 +385,64 @@ def list_models(kind: str):
         return jsonify({"ok": False, "message": str(exc)}), 500
 
 
+def select_chat_model() -> str:
+    try:
+        models = filter_models("text")
+        if models:
+            return models[0]
+    except Exception:
+        pass
+    return "gpt-4.1-mini"
+
+
+def tokenize_text(text: str) -> List[str]:
+    return [token.lower() for token in TOKEN_RE.findall(text or "")]
+
+
+def build_deck_context_full(deck: str) -> Tuple[List[str], int]:
+    note_ids = invoke("findNotes", query=f'deck:"{deck}"') or []
+    if not note_ids:
+        return [], 0
+    notes = invoke("notesInfo", notes=note_ids)
+    snippets = []
+    for note in notes:
+        fields = note.get("fields", {})
+        front = clean_field_text((fields.get("Front") or {}).get("value", ""))
+        back = clean_field_text((fields.get("Back") or {}).get("value", ""))
+        if not front and not back:
+            continue
+        combined = f"{front} — {back}".strip(" —")
+        if not combined:
+            continue
+        snippets.append(combined)
+    return snippets, len(note_ids)
+
+
 @app.route("/api/deck-images", methods=["GET"])
 def deck_images():
     deck = request.args.get("deck", "").strip()
     if not deck:
         return jsonify({"ok": False, "message": "Deck parameter is required."}), 400
+    try:
+        page = int(request.args.get("page", "1"))
+        page_size = int(request.args.get("page_size", "24"))
+    except ValueError:
+        return jsonify({"ok": False, "message": "Invalid page or page_size."}), 400
+    if page < 1 or page_size < 1 or page_size > 200:
+        return jsonify({"ok": False, "message": "Invalid page or page_size."}), 400
 
     try:
         note_ids = invoke("findNotes", query=f'deck:"{deck}"')
         if not note_ids:
-            return jsonify({"ok": True, "images": []})
+            return jsonify(
+                {
+                    "ok": True,
+                    "images": [],
+                    "page": page,
+                    "page_size": page_size,
+                    "total": 0,
+                }
+            )
         notes = invoke("notesInfo", notes=note_ids)
         results = []
         for note_id, note in zip(note_ids, notes):
@@ -280,7 +472,18 @@ def deck_images():
                     "image_url": url_for("serve_image_file", filename=local_path.name),
                 }
             )
-        return jsonify({"ok": True, "images": results})
+        total = len(results)
+        start = (page - 1) * page_size
+        end = start + page_size
+        return jsonify(
+            {
+                "ok": True,
+                "images": results[start:end],
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+            }
+        )
     except Exception as exc:
         return jsonify({"ok": False, "message": str(exc)}), 500
 
@@ -311,6 +514,136 @@ def deck_cards():
                 }
             )
         return jsonify({"ok": True, "cards": cards})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
+@app.route("/api/deck-chat", methods=["POST"])
+def deck_chat():
+    data = request.get_json(silent=True) or {}
+    deck = data.get("deck", "").strip()
+    question = data.get("question", "").strip()
+    stream = bool(data.get("stream"))
+    history = data.get("history") or []
+    requested_model = (data.get("model") or "").strip()
+    if not deck or not question:
+        return jsonify({"ok": False, "message": "Deck and question are required."}), 400
+
+    try:
+        context_snippets, total_cards = build_deck_context_full(deck)
+        if not context_snippets:
+            return jsonify(
+                {
+                    "ok": True,
+                    "answer": "I couldn't find any cards in that deck to reference.",
+                    "model": None,
+                    "snippets": [],
+                }
+            )
+        client = OpenAI()
+        model = select_chat_model()
+        if requested_model:
+            try:
+                if requested_model in cached_model_ids() and is_text_model(requested_model):
+                    model = requested_model
+            except Exception:
+                pass
+        context_block = "\n".join(f"- {snippet}" for snippet in context_snippets)
+        history_block = ""
+        if isinstance(history, list):
+            trimmed = history[-6:]
+            history_lines = []
+            for item in trimmed:
+                role = (item.get("role") or "user").strip().lower()
+                content = (item.get("content") or "").strip()
+                if not content:
+                    continue
+                label = "User" if role == "user" else "Assistant"
+                history_lines.append(f"{label}: {content}")
+            if history_lines:
+                history_block = "\n".join(history_lines)
+        convo_block = ""
+        if history_block:
+            convo_block = f"Conversation so far:\n{history_block}\n\n"
+        prompt = (
+            "You are a study assistant for an Anki vocabulary deck.\n"
+            "You are given the full list of card text only (no audio or images).\n"
+            "Use the deck contents as a starting point, but you may add helpful external knowledge\n"
+            "to explain usage, nuance, and examples. Do not fabricate cards that are not in the deck.\n"
+            "Be concise and tutoring-focused: 2-4 sentences max unless asked for more.\n"
+            "Prefer a short explanation + 3 bullet examples max (only if they help).\n"
+            "If the question is broad, ask 1 clarifying question instead of dumping info.\n\n"
+            "The user's native language is English; respond primarily in English and include foreign words only when helpful.\n\n"
+            "Use plain text only. Avoid markdown or formatting symbols like **, _, `, #, >.\n\n"
+            "If the user asks for a quiz, ask ONE item at a time and wait for their reply.\n"
+            "Use simple bullets for lists. Avoid numbered lists unless the user requests them.\n\n"
+            "If you provide examples, give at most 3 and offer to continue if needed.\n\n"
+            f"Deck: {deck} (total cards: {total_cards})\n"
+            f"Deck word pairs:\n{context_block}\n\n"
+            f"{convo_block}"
+            f"Question: {question}\nAnswer:"
+        )
+        reasoning_opts = None
+        text_opts = None
+        if model.startswith("gpt-5"):
+            reasoning_opts = {"effort": "medium"}
+            text_opts = {"verbosity": "low"}
+        metadata = {
+            "app": "anki_deck_studio",
+            "feature": "deck_chat",
+            "deck": deck,
+        }
+
+        if stream:
+            def generate():
+                streamed_text = []
+                response_stream = client.responses.create(
+                    model=model,
+                    input=prompt,
+                    reasoning=reasoning_opts,
+                    text=text_opts,
+                    store=OPENAI_STORE_RESPONSES,
+                    metadata=metadata,
+                    stream=True,
+                )
+                for event in response_stream:
+                    delta = getattr(event, "delta", None)
+                    if not delta:
+                        delta = getattr(event, "output_text", None)
+                    if not delta:
+                        delta = getattr(event, "text", None)
+                    if delta:
+                        streamed_text.append(delta)
+                        yield delta
+                final_answer = "".join(streamed_text).strip()
+                if final_answer:
+                    log_chat_event(
+                        deck=deck,
+                        model=model,
+                        question=question,
+                        answer=final_answer,
+                        history=history,
+                    )
+            response = Response(stream_with_context(generate()), mimetype="text/plain")
+            response.headers["X-Chat-Model"] = model
+            return response
+        response = client.responses.create(
+            model=model,
+            input=prompt,
+            reasoning=reasoning_opts,
+            text=text_opts,
+            store=OPENAI_STORE_RESPONSES,
+            metadata=metadata,
+        )
+        answer = get_response_text(response).strip() or "No response."
+        log_chat_event(
+            deck=deck,
+            model=model,
+            question=question,
+            answer=answer,
+            history=history,
+        )
+        return jsonify({"ok": True, "answer": answer, "model": model, "snippets": context_snippets})
     except Exception as exc:
         return jsonify({"ok": False, "message": str(exc)}), 500
 

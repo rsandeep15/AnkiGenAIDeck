@@ -1,4 +1,10 @@
 .DS_Store
+.venv/
+__pycache__/
+*.log
+.pytest_cache/
+.mypy_cache/
+.coverage
 *.mp3
 *.pdf
 *.jpeg
@@ -7,6 +13,15 @@
 media/audio/
 media/images/
 pdfs/
+uploads/
 .env
 korean_vocab_dataset.csv
 ExportKoreanVocab.py
+instance/
+*.sqlite
+chat_eval_results.jsonl
+prompt_variants.jsonl
+scripts/anki_deck_summary.py
+scripts/chat_eval.py
+scripts/prompts_korean.txt
+scripts/

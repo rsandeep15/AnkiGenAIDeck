@@ -49,6 +49,40 @@ class TestDeckImagesRoute(unittest.TestCase):
 
         image_path.unlink()
 
+    @patch("app.invoke")
+    def test_deck_images_paginates_results(self, mock_invoke) -> None:
+        image_one = app.IMAGE_DIR / "1.png"
+        image_two = app.IMAGE_DIR / "2.png"
+        image_one.write_bytes(b"fake")
+        image_two.write_bytes(b"fake")
+
+        mock_invoke.side_effect = [
+            [1, 2],
+            [
+                {
+                    "fields": {
+                        "Front": {"value": '<img src="1.png">'},
+                        "Back": {"value": "Hello"},
+                    }
+                },
+                {
+                    "fields": {
+                        "Front": {"value": '<img src="2.png">'},
+                        "Back": {"value": "World"},
+                    }
+                },
+            ],
+        ]
+
+        response = self.client.get("/api/deck-images?deck=Test&page=1&page_size=1")
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["total"], 2)
+        self.assertEqual(len(data["images"]), 1)
+
+        image_one.unlink()
+        image_two.unlink()
+
 
 class TestAppUtilities(unittest.TestCase):
     def test_clean_field_text_strips_sound_tags_and_html(self) -> None:
@@ -87,6 +121,34 @@ class TestAppUtilities(unittest.TestCase):
         self.assertEqual(summary, {"ok": True, "added": 2})
         self.assertIsNone(app.parse_summary_line("SUMMARY: not-json"))
 
+    def test_tokenize_text(self) -> None:
+        tokens = app.tokenize_text("Hello, world! 안녕하세요?")
+        self.assertIn("hello", tokens)
+        self.assertIn("world", tokens)
+        self.assertIn("안녕하세요", tokens)
+
+    def test_get_response_text_prefers_output_text(self) -> None:
+        class FakeResponse:
+            output_text = "hello"
+
+        self.assertEqual(app.get_response_text(FakeResponse()), "hello")
+
+
+class TestDeckChatContext(unittest.TestCase):
+    @patch("app.invoke")
+    def test_build_deck_context_full_returns_all(self, mock_invoke) -> None:
+        mock_invoke.side_effect = [
+            [1, 2],
+            [
+                {"fields": {"Front": {"value": "apple"}, "Back": {"value": "사과"}}},
+                {"fields": {"Front": {"value": "banana"}, "Back": {"value": "바나나"}}},
+            ],
+        ]
+        snippets, total = app.build_deck_context_full("Test")
+        self.assertEqual(len(snippets), 2)
+        self.assertIn("apple", snippets[0])
+        self.assertEqual(total, 2)
+
     def test_deck_cards_requires_deck_param(self) -> None:
         client = app.app.test_client()
         response = client.get("/api/deck-cards")
@@ -111,6 +173,13 @@ class TestAppUtilities(unittest.TestCase):
     def test_media_endpoint_requires_filename(self) -> None:
         client = app.app.test_client()
         response = client.get("/api/media")
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertFalse(data["ok"])
+
+    def test_export_chat_logs_requires_valid_limit(self) -> None:
+        client = app.app.test_client()
+        response = client.get("/api/chat-logs/export?limit=bad")
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertFalse(data["ok"])

@@ -16,6 +16,9 @@ DEFAULT_IMAGE_MODEL = "gpt-image-1"
 DEFAULT_TTS_WORKERS = 10
 DEFAULT_IMAGE_WORKERS = 3
 
+# OpenAI storage (for evals/logging). When False, do not request server-side storage.
+OPENAI_STORE_RESPONSES = True
+
 # Gating prompt for images
 GATING_PROMPT_ID = "pmpt_69194beaad7c819497842682bad97629040fc2c239b73233"
 GATING_PROMPT_VERSION = "4"

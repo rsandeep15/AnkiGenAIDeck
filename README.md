@@ -5,7 +5,7 @@ Streamline your language decks with a trio of OpenAI-powered helpers:
 - `AnkiSync.py` turns vocab PDFs into fully-populated Anki decks.
 - `AnkiDeckToSpeech.py` adds natural-sounding audio pronunciations.
 - `AnkiDeckToImages.py` decorates cards with visual mnemonics.
-- `app.py` (optional) launches a local Flask UI for drag-and-drop syncing.
+- `app.py` (optional) launches a local Flask UI for drag-and-drop syncing, media generation, and deck tutoring chat.
 
 All scripts talk to a local AnkiConnect instance at `http://127.0.0.1:8765` and assume `OPENAI_API_KEY` is set in your shell.
 
@@ -20,12 +20,12 @@ pip install -r requirements.txt
 
 # store secrets in .env so both CLI and Flask server can read them
 cat <<'EOF' > .env
-OPENAI_API_KEY=sk-...
+OPENAI_API_KEY=YOUR_KEY_HERE
 FLASK_APP=app.py
 EOF
 
 # (optional) export for current shell if you plan to run scripts directly
-export OPENAI_API_KEY=sk-...
+export OPENAI_API_KEY=YOUR_KEY_HERE
 export FLASK_APP=app.py
 ```
 
@@ -59,6 +59,12 @@ Switch to the **Deck Audio** or **Deck Images** tabs to:
 - watch optimistic progress/ETA updates while long-running jobs finish
 - choose from your account’s available OpenAI models via the auto-populated dropdowns
 - control concurrency with worker dropdowns that mirror the script defaults
+
+There is also a **Deck Chat** tab that lets you pick a deck, choose a response model, and ask tutoring questions.
+Answers stream live in a chat-style view (Enter to send, Shift+Enter for newline), with multi-turn context in-session.
+
+The **Deck Images** tab now includes the image gallery with pagination and per-deck image coverage.
+The **Deck Browser** tab shows word pairs in a scrollable table.
 
 ---
 
@@ -118,7 +124,7 @@ Text is sanitized before synthesis (HTML stripped, whitespace collapsed). The sc
 
 ---
 
-## AnkiImageGen — Add Visual Mnemonics
+## AnkiDeckToImages — Add Visual Mnemonics
 
 **What it does**
 
@@ -144,6 +150,7 @@ Key flags:
 - `--skip-gating`: generate for every card, bypassing the saved gating prompt
 
 Each run ends with a summary of added / skipped / failed image generations.
+Images are attached to the **Back** field of the card.
 
 ---
 

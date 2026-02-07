@@ -23,16 +23,23 @@ const generateImagesButton = document.getElementById("generateImages");
 const statusLogImages = document.getElementById("statusLogImages");
 const imageCoverageBadge = document.getElementById("imageCoverageBadge");
 
-const galleryDeckSelect = document.getElementById("galleryDeckSelect");
-const refreshDecksGallery = document.getElementById("refreshDecksGallery");
-const loadGalleryButton = document.getElementById("loadGallery");
 const statusLogGallery = document.getElementById("statusLogGallery");
 const galleryGrid = document.getElementById("galleryGrid");
+const galleryPrevButton = document.getElementById("galleryPrev");
+const galleryNextButton = document.getElementById("galleryNext");
+const galleryPageInfo = document.getElementById("galleryPageInfo");
 const browserDeckSelect = document.getElementById("browserDeckSelect");
 const refreshDecksBrowser = document.getElementById("refreshDecksBrowser");
 const loadBrowserButton = document.getElementById("loadBrowser");
 const statusLogBrowser = document.getElementById("statusLogBrowser");
 const browserTableBody = document.getElementById("browserTableBody");
+const chatDeckSelect = document.getElementById("chatDeckSelect");
+const refreshDecksChat = document.getElementById("refreshDecksChat");
+const chatModelSelect = document.getElementById("chatModelSelect");
+const chatQuestion = document.getElementById("chatQuestion");
+const chatAskButton = document.getElementById("chatAsk");
+const chatThread = document.getElementById("chatThread");
+const chatModel = document.getElementById("chatModel");
 
 const tabButtons = document.querySelectorAll(".tab-button");
 const tabPanels = document.querySelectorAll(".tab-panel");
@@ -40,6 +47,9 @@ const tabPanels = document.querySelectorAll(".tab-panel");
 let selectedFile = null;
 let audioJobRunning = false;
 let imageJobRunning = false;
+let galleryPage = 1;
+let galleryTotal = 0;
+let chatHistory = [];
 
 function setStatus(element, message, append = false) {
     if (!element) return;
@@ -57,6 +67,40 @@ function appendStatus(element, message) {
     } else {
         element.textContent += `\n${message}`;
     }
+}
+
+function renderChatThread() {
+    if (!chatThread) return;
+    if (!chatHistory.length) {
+        chatThread.innerHTML = '<div class="chat-message assistant">Select a deck and ask a question.</div>';
+        return;
+    }
+    chatThread.innerHTML = chatHistory
+        .map((msg) => {
+            const roleClass = msg.role === "user" ? "user" : "assistant";
+            if (msg.role === "assistant") {
+                const safe = normalizeChatText(msg.content || "")
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/\n/g, "<br />")
+                    .replace(/<br\s*\/?>\s*[-*]\s+/g, "<br />• ");
+                return `<div class="chat-message assistant">${safe}</div>`;
+            }
+            const safe = (msg.content || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            return `<div class="chat-message ${roleClass}">${safe}</div>`;
+        })
+        .join("");
+    chatThread.scrollTop = chatThread.scrollHeight;
+}
+
+function normalizeChatText(text) {
+    return (text || "")
+        .replace(/\*\*/g, "")
+        .replace(/__/g, "")
+        .replace(/`/g, "")
+        .replace(/^#+\s*/gm, "")
+        .replace(/^>\s*/gm, "");
 }
 
 function showProgress(element, text) {
@@ -242,7 +286,7 @@ function populateDeckSelect(select, decks) {
 }
 
 async function loadDecks() {
-    const selects = [audioDeckSelect, imageDeckSelect, galleryDeckSelect, browserDeckSelect];
+    const selects = [audioDeckSelect, imageDeckSelect, browserDeckSelect, chatDeckSelect];
     selects.forEach((select) => {
         if (select) {
             select.innerHTML = '<option value="">Loading decks...</option>';
@@ -253,6 +297,10 @@ async function loadDecks() {
     setStatus(statusLogImages, "Fetching decks...");
     setStatus(statusLogGallery, "Fetching decks...");
     setStatus(statusLogBrowser, "Fetching decks...");
+    if (chatThread) {
+        chatHistory = [];
+        renderChatThread();
+    }
     try {
         const response = await fetch("/api/decks");
         const data = await response.json();
@@ -262,6 +310,10 @@ async function loadDecks() {
             setStatus(statusLogImages, "Select a deck and model to begin.");
             setStatus(statusLogGallery, "Select a deck to view images.");
             setStatus(statusLogBrowser, "Select a deck to view its word pairs.");
+            if (chatThread) {
+                chatHistory = [];
+                renderChatThread();
+            }
             updateAudioCoverage();
             updateImageCoverage();
         } else {
@@ -275,6 +327,10 @@ async function loadDecks() {
             setStatus(statusLogImages, message);
             setStatus(statusLogGallery, message);
             setStatus(statusLogBrowser, message);
+            if (chatThread) {
+                chatHistory = [{ role: "assistant", content: message }];
+                renderChatThread();
+            }
         }
     } catch (error) {
         selects.forEach((select) => {
@@ -286,6 +342,10 @@ async function loadDecks() {
         setStatus(statusLogImages, `❌ Failed to fetch decks: ${error}`);
         setStatus(statusLogGallery, `❌ Failed to fetch decks: ${error}`);
         setStatus(statusLogBrowser, `❌ Failed to fetch decks: ${error}`);
+        if (chatThread) {
+            chatHistory = [{ role: "assistant", content: `❌ Failed to fetch decks: ${error}` }];
+            renderChatThread();
+        }
     } finally {
         selects.forEach((select) => {
             if (select) select.disabled = false;
@@ -294,6 +354,7 @@ async function loadDecks() {
         updateImageControls();
         updateGalleryControls();
         updateBrowserControls();
+        updateChatControls();
     }
 }
 
@@ -312,13 +373,24 @@ function updateImageControls() {
 }
 
 function updateGalleryControls() {
-    if (!loadGalleryButton) return;
-    loadGalleryButton.disabled = !Boolean(galleryDeckSelect?.value);
+    if (!galleryPrevButton || !galleryNextButton || !galleryPageInfo) return;
+    const totalPages = Math.max(1, Math.ceil(galleryTotal / getGalleryPageSize()));
+    galleryPrevButton.disabled = galleryPage <= 1;
+    galleryNextButton.disabled = galleryPage >= totalPages;
+    galleryPageInfo.textContent = `Page ${galleryPage} of ${totalPages}`;
 }
 
 function updateBrowserControls() {
     if (!loadBrowserButton) return;
     loadBrowserButton.disabled = !Boolean(browserDeckSelect?.value);
+}
+
+function updateChatControls() {
+    if (!chatAskButton) return;
+    const hasDeck = Boolean(chatDeckSelect?.value);
+    const hasModel = Boolean(chatModelSelect?.value);
+    const hasQuestion = Boolean(chatQuestion?.value?.trim());
+    chatAskButton.disabled = !(hasDeck && hasModel && hasQuestion);
 }
 
 syncButton.addEventListener("click", async () => {
@@ -523,8 +595,10 @@ generateImagesButton.addEventListener("click", generateImages);
 
 refreshDecksAudio.addEventListener("click", loadDecks);
 refreshDecksImages.addEventListener("click", loadDecks);
-refreshDecksGallery.addEventListener("click", loadDecks);
 refreshDecksBrowser.addEventListener("click", loadDecks);
+if (refreshDecksChat) {
+    refreshDecksChat.addEventListener("click", loadDecks);
+}
 
 audioDeckSelect.addEventListener("change", updateAudioControls);
 audioModelSelect.addEventListener("change", updateAudioControls);
@@ -536,10 +610,10 @@ imageModelSelect.addEventListener("change", updateImageControls);
 skipGatingToggle.addEventListener("change", updateImageControls);
 imageWorkerSelect.addEventListener("change", updateImageControls);
 imageDeckSelect.addEventListener("change", updateImageCoverage);
-
-galleryDeckSelect.addEventListener("change", () => {
+imageDeckSelect.addEventListener("change", () => {
     updateGalleryControls();
-    if (galleryDeckSelect.value) {
+    if (imageDeckSelect.value) {
+        galleryPage = 1;
         loadGallery();
     } else if (galleryGrid) {
         galleryGrid.classList.add("empty");
@@ -547,7 +621,25 @@ galleryDeckSelect.addEventListener("change", () => {
     }
 });
 
-loadGalleryButton.addEventListener("click", loadGallery);
+if (galleryPrevButton) {
+    galleryPrevButton.addEventListener("click", () => {
+        if (galleryPage > 1) {
+            galleryPage -= 1;
+            loadGallery();
+        }
+    });
+}
+
+if (galleryNextButton) {
+    galleryNextButton.addEventListener("click", () => {
+        const totalPages = Math.max(1, Math.ceil(galleryTotal / getGalleryPageSize()));
+        if (galleryPage < totalPages) {
+            galleryPage += 1;
+            loadGallery();
+        }
+    });
+}
+
 browserDeckSelect.addEventListener("change", () => {
     updateBrowserControls();
     if (browserDeckSelect.value) {
@@ -558,6 +650,31 @@ browserDeckSelect.addEventListener("change", () => {
 });
 
 loadBrowserButton.addEventListener("click", loadBrowser);
+
+if (chatDeckSelect) {
+    chatDeckSelect.addEventListener("change", () => {
+        updateChatControls();
+        chatHistory = [];
+        renderChatThread();
+    });
+}
+if (chatModelSelect) {
+    chatModelSelect.addEventListener("change", updateChatControls);
+}
+if (chatQuestion) {
+    chatQuestion.addEventListener("input", updateChatControls);
+    chatQuestion.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            if (!chatAskButton?.disabled) {
+                askDeck();
+            }
+        }
+    });
+}
+if (chatAskButton) {
+    chatAskButton.addEventListener("click", askDeck);
+}
 
 function renderGallery(items) {
     if (!galleryGrid) return;
@@ -606,21 +723,29 @@ if (galleryGrid) {
 }
 
 async function loadGallery() {
-    const deck = galleryDeckSelect?.value;
+    const deck = imageDeckSelect?.value;
     if (!deck) {
         setStatus(statusLogGallery, "Select a deck to view images.");
         return;
     }
+    updateGalleryControls();
     setStatus(statusLogGallery, `Loading images for "${deck}"...`);
     try {
-        const response = await fetch(`/api/deck-images?deck=${encodeURIComponent(deck)}`);
+        const response = await fetch(
+            `/api/deck-images?deck=${encodeURIComponent(deck)}&page=${galleryPage}&page_size=${getGalleryPageSize()}`
+        );
         const data = await response.json();
         if (!response.ok || !data.ok) {
             throw new Error(data.message || "Failed to fetch deck images.");
         }
+        galleryTotal = data.total ?? 0;
         renderGallery(data.images || []);
+        updateGalleryControls();
         if ((data.images || []).length) {
-            setStatus(statusLogGallery, `Showing ${data.images.length} image(s) for "${deck}".`);
+            setStatus(
+                statusLogGallery,
+                `Showing ${data.images.length} image(s) for "${deck}" (page ${data.page || galleryPage}).`
+            );
         } else {
             setStatus(statusLogGallery, `No generated images found for "${deck}".`);
         }
@@ -631,6 +756,10 @@ async function loadGallery() {
             galleryGrid.innerHTML = "<p>Unable to load images.</p>";
         }
     }
+}
+
+function getGalleryPageSize() {
+    return 12;
 }
 
 function renderBrowserTable(cards) {
@@ -682,6 +811,7 @@ loadDecks();
 loadModels("text", textModelSelect, "gpt-4.1-mini", statusLogSync, updateSyncButton);
 loadModels("audio", audioModelSelect, "gpt-4o-mini-tts", statusLogAudio, updateAudioControls);
 loadModels("image", imageModelSelect, "gpt-image-1", statusLogImages, updateImageControls);
+loadModels("text", chatModelSelect, "gpt-5.2", null, updateChatControls);
 
 textModelSelect.addEventListener("change", updateSyncButton);
 updateSyncButton();
@@ -692,6 +822,7 @@ updateBrowserControls();
 updateAudioCoverage();
 updateImageCoverage();
 loadTabFromHash();
+updateChatControls();
 
 async function updateAudioCoverage() {
     if (!audioCoverageBadge || !audioDeckSelect?.value) {
@@ -711,6 +842,80 @@ async function updateAudioCoverage() {
         audioCoverageBadge.textContent = `Audio: ${withAudio}/${total} (${coverage}%)`;
     } catch (error) {
         audioCoverageBadge.textContent = "Audio: unavailable";
+    }
+}
+
+async function askDeck() {
+    const deck = chatDeckSelect?.value;
+    const question = chatQuestion?.value?.trim();
+    if (!deck || !question) {
+        if (chatThread) {
+            chatHistory = [{ role: "assistant", content: "Select a deck and ask a question." }];
+            renderChatThread();
+        }
+        if (chatModel) chatModel.textContent = "";
+        return;
+    }
+    if (chatQuestion) {
+        chatQuestion.value = "";
+    }
+    chatHistory.push({ role: "user", content: question });
+    const assistantIndex = chatHistory.push({ role: "assistant", content: "" }) - 1;
+    renderChatThread();
+    if (chatAskButton) chatAskButton.disabled = true;
+    try {
+        const response = await fetch("/api/deck-chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                deck,
+                question,
+                model: chatModelSelect?.value || null,
+                history: chatHistory.slice(0, -1),
+                stream: true,
+            }),
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || "Failed to get answer.");
+        }
+        const reader = response.body?.getReader();
+        if (!reader) {
+            const data = await response.json();
+            chatHistory[assistantIndex].content = data.answer || "No answer.";
+            renderChatThread();
+            if (chatModel && data.model) {
+                chatModel.textContent = `Model: ${data.model}`;
+            }
+            return;
+        }
+        if (chatModel) chatModel.textContent = "Model: streaming";
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            if (chunk) {
+                if (chunk.startsWith(buffer)) {
+                    buffer = chunk;
+                } else {
+                    buffer += chunk;
+                }
+            }
+            chatHistory[assistantIndex].content = buffer;
+            renderChatThread();
+        }
+        if (chatModel) {
+            const modelFromResponse = response.headers.get("X-Chat-Model");
+            chatModel.textContent = modelFromResponse ? `Model: ${modelFromResponse}` : "Model: unknown";
+        }
+    } catch (error) {
+        chatHistory[assistantIndex].content = `❌ ${error}`;
+        renderChatThread();
+        if (chatModel) chatModel.textContent = "";
+    } finally {
+        updateChatControls();
     }
 }
 
