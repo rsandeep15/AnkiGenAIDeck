@@ -18,6 +18,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS_MANIFEST = ROOT / "agent_tools.json"
+LOCAL_DOCS_DIR = ROOT / ".local_memory" / "pdfs"
 
 
 def run_script(script_name: str, args: list[str]) -> int:
@@ -37,6 +38,8 @@ def cmd_list(_: argparse.Namespace) -> int:
             {"id": "generate_audio_for_deck"},
             {"id": "generate_images_for_deck"},
             {"id": "import_cards_to_deck"},
+            {"id": "list_local_reference_pdfs"},
+            {"id": "read_local_reference_pdf"},
             {"id": "run_web_ui"},
         ],
     }
@@ -94,6 +97,68 @@ def cmd_ui(args: argparse.Namespace) -> int:
     port = str(args.port)
     cmd = [sys.executable, "-m", "flask", "--app", "app.py", "run", "--port", port]
     return subprocess.run(cmd, cwd=ROOT).returncode
+
+
+def resolve_local_docs_dir(custom_dir: str | None = None) -> Path:
+    path = Path(custom_dir).expanduser() if custom_dir else LOCAL_DOCS_DIR
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def cmd_docs_list(args: argparse.Namespace) -> int:
+    docs_dir = resolve_local_docs_dir(args.dir)
+    files = sorted(docs_dir.rglob("*.pdf"))
+    payload = {
+        "ok": True,
+        "docs_dir": str(docs_dir),
+        "count": len(files),
+        "files": [
+            {
+                "name": p.name,
+                "relative_path": str(p.relative_to(docs_dir)),
+                "bytes": p.stat().st_size,
+                "modified_epoch": int(p.stat().st_mtime),
+            }
+            for p in files
+        ],
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_docs_read(args: argparse.Namespace) -> int:
+    docs_dir = resolve_local_docs_dir(args.dir)
+    target = (docs_dir / args.file).resolve()
+    try:
+        target.relative_to(docs_dir.resolve())
+    except ValueError:
+        print("File path must stay inside the local docs directory.")
+        return 1
+    if not target.exists():
+        print(f"PDF not found: {target}")
+        return 1
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(target))
+    pages = len(reader.pages)
+    page_num = args.page
+    if page_num < 1 or page_num > pages:
+        print(f"Page out of range. PDF has {pages} page(s).")
+        return 1
+    text = reader.pages[page_num - 1].extract_text() or ""
+    text = text.strip()
+    if args.max_chars > 0:
+        text = text[: args.max_chars]
+    payload = {
+        "ok": True,
+        "file": str(target),
+        "page": page_num,
+        "pages": pages,
+        "text": text,
+    }
+    print(json.dumps(payload, ensure_ascii=False))
+    return 0
 
 
 def load_card_rows(input_path: Path) -> list[dict[str, Any]]:
@@ -280,6 +345,33 @@ def build_parser() -> argparse.ArgumentParser:
     s_ui = sub.add_parser("ui", help="Run Flask UI.")
     s_ui.add_argument("--port", type=int, default=5000)
     s_ui.set_defaults(func=cmd_ui)
+
+    s_docs_list = sub.add_parser(
+        "docs-list",
+        help="List local reference PDFs from the local memory directory.",
+    )
+    s_docs_list.add_argument(
+        "--dir",
+        default="",
+        help="Optional docs directory override (default: .local_memory/pdfs).",
+    )
+    s_docs_list.set_defaults(func=cmd_docs_list)
+
+    s_docs_read = sub.add_parser(
+        "docs-read",
+        help="Read extracted text from a specific page of a local reference PDF.",
+    )
+    s_docs_read.add_argument("--file", required=True, help="PDF filename or relative path.")
+    s_docs_read.add_argument("--page", type=int, default=1, help="1-based page number.")
+    s_docs_read.add_argument(
+        "--max-chars", type=int, default=4000, help="Max characters returned."
+    )
+    s_docs_read.add_argument(
+        "--dir",
+        default="",
+        help="Optional docs directory override (default: .local_memory/pdfs).",
+    )
+    s_docs_read.set_defaults(func=cmd_docs_read)
 
     s_cards = sub.add_parser(
         "cards-import",

@@ -31,6 +31,18 @@
       "backend_script": "utils/anki_connect.py"
     },
     {
+      "id": "list_local_reference_pdfs",
+      "description": "List local-only reference PDFs kept outside git tracking.",
+      "invoke": "python scripts/agent_tools.py docs-list",
+      "backend_script": "scripts/agent_tools.py"
+    },
+    {
+      "id": "read_local_reference_pdf",
+      "description": "Extract text from a specific page of a local reference PDF.",
+      "invoke": "python scripts/agent_tools.py docs-read --file <filename.pdf> --page <n>",
+      "backend_script": "scripts/agent_tools.py"
+    },
+    {
       "id": "run_web_ui",
       "description": "Run the local Flask UI for sync/audio/images/gallery workflows.",
       "invoke": "python scripts/agent_tools.py ui --port 5000",

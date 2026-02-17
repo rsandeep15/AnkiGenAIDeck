@@ -25,6 +25,8 @@ Supported workflows:
 - `audio`: deck audio generation
 - `images`: deck image generation
 - `cards-import`: import explicit Front/Back pairs from JSON
+- `docs-list`: list local memory PDFs
+- `docs-read`: read a specific page from a local memory PDF
 - `ui`: run Flask app
 
 Examples:
@@ -57,6 +59,10 @@ Examples:
   --front-key Front \
   --back-key Back \
   --dry-run
+
+# Local memory docs (agent-readable)
+.venv/bin/python scripts/agent_tools.py docs-list
+.venv/bin/python scripts/agent_tools.py docs-read --file Toy_Korean_Verbs_Table.pdf --page 1
 ```
 
 `cards-import` accepts either:
@@ -65,6 +71,13 @@ Examples:
 - or a wrapped object, e.g. `{"cards":[{"front":"...","back":"..."}]}`
 
 Tool metadata is in `agent_tools.json`.
+
+### Local memory docs
+
+- Put private/reference PDFs in `.local_memory/pdfs/` for agent lookup via `docs-list` and `docs-read`.
+- `.local_memory/` is ignored by git by default.
+- A single shareable sample is committed for demos:
+  - `.local_memory/pdfs/Toy_Korean_Verbs_Table.pdf`
 
 ---
 

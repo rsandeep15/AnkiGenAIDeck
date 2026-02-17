@@ -15,6 +15,11 @@ media/images/
 pdfs/
 uploads/
 tmp/
+.local_memory/
+!.local_memory/
+.local_memory/*
+!.local_memory/pdfs/
+!.local_memory/pdfs/Toy_Korean_Verbs_Table.pdf
 .env
 korean_vocab_dataset.csv
 ExportKoreanVocab.py

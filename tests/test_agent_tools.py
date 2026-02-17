@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from pypdf import PdfWriter
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AGENT_TOOLS_PATH = REPO_ROOT / "scripts" / "agent_tools.py"
@@ -79,6 +81,70 @@ class TestAgentToolsHelpers(unittest.TestCase):
             self.assertTrue(summary["ok"])
             self.assertTrue(summary["dry_run"])
             self.assertEqual(summary["to_add"], 2)
+
+    def test_docs_list_uses_custom_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            docs_dir = Path(td) / "pdfs"
+            docs_dir.mkdir(parents=True, exist_ok=True)
+            sample_pdf = docs_dir / "sample.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=200, height=200)
+            with sample_pdf.open("wb") as fh:
+                writer.write(fh)
+
+            result = subprocess.run(
+                [
+                    str(REPO_ROOT / ".venv" / "bin" / "python"),
+                    str(AGENT_TOOLS_PATH),
+                    "docs-list",
+                    "--dir",
+                    str(docs_dir),
+                ],
+                cwd=REPO_ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["count"], 1)
+            self.assertEqual(payload["files"][0]["name"], "sample.pdf")
+
+    def test_docs_read_returns_ok_for_valid_page(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            docs_dir = Path(td) / "pdfs"
+            docs_dir.mkdir(parents=True, exist_ok=True)
+            sample_pdf = docs_dir / "sample.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=200, height=200)
+            with sample_pdf.open("wb") as fh:
+                writer.write(fh)
+
+            result = subprocess.run(
+                [
+                    str(REPO_ROOT / ".venv" / "bin" / "python"),
+                    str(AGENT_TOOLS_PATH),
+                    "docs-read",
+                    "--dir",
+                    str(docs_dir),
+                    "--file",
+                    "sample.pdf",
+                    "--page",
+                    "1",
+                    "--max-chars",
+                    "200",
+                ],
+                cwd=REPO_ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["page"], 1)
+            self.assertEqual(payload["pages"], 1)
 
 
 if __name__ == "__main__":
