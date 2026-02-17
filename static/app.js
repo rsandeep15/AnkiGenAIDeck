@@ -28,13 +28,10 @@ const galleryGrid = document.getElementById("galleryGrid");
 const galleryPrevButton = document.getElementById("galleryPrev");
 const galleryNextButton = document.getElementById("galleryNext");
 const galleryPageInfo = document.getElementById("galleryPageInfo");
-const browserDeckSelect = document.getElementById("browserDeckSelect");
-const refreshDecksBrowser = document.getElementById("refreshDecksBrowser");
-const loadBrowserButton = document.getElementById("loadBrowser");
+const browserDeckSelect = imageDeckSelect;
 const statusLogBrowser = document.getElementById("statusLogBrowser");
 const browserTableBody = document.getElementById("browserTableBody");
 const browserSearchTerm = document.getElementById("browserSearchTerm");
-const browserSearchButton = document.getElementById("browserSearchButton");
 const browserSearchClear = document.getElementById("browserSearchClear");
 const statusLogSearch = document.getElementById("statusLogSearch");
 const searchTableBody = document.getElementById("searchTableBody");
@@ -55,6 +52,9 @@ let imageJobRunning = false;
 let galleryPage = 1;
 let galleryTotal = 0;
 let chatHistory = [];
+let searchDebounceTimer = null;
+let searchRequestSeq = 0;
+const SEARCH_DEBOUNCE_MS = 300;
 
 function setStatus(element, message, append = false) {
     if (!element) return;
@@ -291,7 +291,7 @@ function populateDeckSelect(select, decks) {
 }
 
 async function loadDecks() {
-    const selects = [audioDeckSelect, imageDeckSelect, browserDeckSelect, chatDeckSelect];
+    const selects = [audioDeckSelect, imageDeckSelect, chatDeckSelect];
     selects.forEach((select) => {
         if (select) {
             select.innerHTML = '<option value="">Loading decks...</option>';
@@ -321,6 +321,11 @@ async function loadDecks() {
             }
             updateAudioCoverage();
             updateImageCoverage();
+            if (imageDeckSelect?.value) {
+                galleryPage = 1;
+                loadGallery();
+                loadBrowser();
+            }
         } else {
             const message = data.message || "No decks found.";
             selects.forEach((select) => {
@@ -358,7 +363,6 @@ async function loadDecks() {
         updateAudioControls();
         updateImageControls();
         updateGalleryControls();
-        updateBrowserControls();
         updateChatControls();
     }
 }
@@ -383,17 +387,6 @@ function updateGalleryControls() {
     galleryPrevButton.disabled = galleryPage <= 1;
     galleryNextButton.disabled = galleryPage >= totalPages;
     galleryPageInfo.textContent = `Page ${galleryPage} of ${totalPages}`;
-}
-
-function updateBrowserControls() {
-    if (!loadBrowserButton) return;
-    loadBrowserButton.disabled = !Boolean(browserDeckSelect?.value);
-}
-
-function updateSearchControls() {
-    if (!browserSearchButton) return;
-    const hasTerm = Boolean(browserSearchTerm?.value?.trim());
-    browserSearchButton.disabled = !hasTerm;
 }
 
 function updateChatControls() {
@@ -606,7 +599,6 @@ generateImagesButton.addEventListener("click", generateImages);
 
 refreshDecksAudio.addEventListener("click", loadDecks);
 refreshDecksImages.addEventListener("click", loadDecks);
-refreshDecksBrowser.addEventListener("click", loadDecks);
 if (refreshDecksChat) {
     refreshDecksChat.addEventListener("click", loadDecks);
 }
@@ -626,9 +618,13 @@ imageDeckSelect.addEventListener("change", () => {
     if (imageDeckSelect.value) {
         galleryPage = 1;
         loadGallery();
+        loadBrowser();
     } else if (galleryGrid) {
         galleryGrid.classList.add("empty");
         galleryGrid.innerHTML = "<p>No deck selected.</p>";
+        if (browserTableBody) {
+            browserTableBody.innerHTML = `<tr><td colspan="2" class="empty-row">No deck selected.</td></tr>`;
+        }
     }
 });
 
@@ -651,35 +647,27 @@ if (galleryNextButton) {
     });
 }
 
-browserDeckSelect.addEventListener("change", () => {
-    updateBrowserControls();
-    if (browserDeckSelect.value) {
-        loadBrowser();
-    } else if (browserTableBody) {
-        browserTableBody.innerHTML = `<tr><td colspan="3" class="empty-row">No deck selected.</td></tr>`;
-    }
-});
-
-loadBrowserButton.addEventListener("click", loadBrowser);
-
 if (browserSearchTerm) {
-    browserSearchTerm.addEventListener("input", updateSearchControls);
+    browserSearchTerm.addEventListener("input", queueSearch);
     browserSearchTerm.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             event.preventDefault();
-            if (!browserSearchButton?.disabled) {
-                searchDecks();
+            if (searchDebounceTimer) {
+                clearTimeout(searchDebounceTimer);
+                searchDebounceTimer = null;
             }
+            searchDecks();
         }
     });
-}
-if (browserSearchButton) {
-    browserSearchButton.addEventListener("click", searchDecks);
 }
 if (browserSearchClear) {
     browserSearchClear.addEventListener("click", () => {
         if (browserSearchTerm) browserSearchTerm.value = "";
-        updateSearchControls();
+        if (searchDebounceTimer) {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = null;
+        }
+        searchRequestSeq += 1;
         setStatus(statusLogSearch, "Enter a word to find matching cards.");
         if (searchTableBody) {
             searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">No search yet.</td></tr>`;
@@ -869,12 +857,19 @@ async function searchDecks() {
     const term = browserSearchTerm?.value?.trim();
     if (!term) {
         setStatus(statusLogSearch, "Enter a word to search.");
+        if (searchTableBody) {
+            searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">No search yet.</td></tr>`;
+        }
         return;
     }
+    const requestId = ++searchRequestSeq;
     setStatus(statusLogSearch, `Searching for "${term}"...`);
     try {
         const response = await fetch(`/api/deck-search?term=${encodeURIComponent(term)}`);
         const data = await response.json();
+        if (requestId !== searchRequestSeq) {
+            return;
+        }
         if (!response.ok || !data.ok) {
             throw new Error(data.message || "Search failed.");
         }
@@ -885,11 +880,38 @@ async function searchDecks() {
             setStatus(statusLogSearch, `No matches found for "${term}".`);
         }
     } catch (error) {
+        if (requestId !== searchRequestSeq) {
+            return;
+        }
         setStatus(statusLogSearch, `❌ Search failed: ${error}`);
         if (searchTableBody) {
             searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Unable to load results.</td></tr>`;
         }
     }
+}
+
+function queueSearch() {
+    const term = browserSearchTerm?.value?.trim();
+    if (!term) {
+        if (searchDebounceTimer) {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = null;
+        }
+        searchRequestSeq += 1;
+        setStatus(statusLogSearch, "Enter a word to find matching cards.");
+        if (searchTableBody) {
+            searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">No search yet.</td></tr>`;
+        }
+        return;
+    }
+    setStatus(statusLogSearch, `Searching for "${term}"...`);
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+    }
+    searchDebounceTimer = setTimeout(() => {
+        searchDebounceTimer = null;
+        searchDecks();
+    }, SEARCH_DEBOUNCE_MS);
 }
 
 loadDecks();
@@ -903,8 +925,6 @@ updateSyncButton();
 updateAudioControls();
 updateImageControls();
 updateGalleryControls();
-updateBrowserControls();
-updateSearchControls();
 updateAudioCoverage();
 updateImageCoverage();
 loadTabFromHash();
