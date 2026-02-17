@@ -33,6 +33,11 @@ const refreshDecksBrowser = document.getElementById("refreshDecksBrowser");
 const loadBrowserButton = document.getElementById("loadBrowser");
 const statusLogBrowser = document.getElementById("statusLogBrowser");
 const browserTableBody = document.getElementById("browserTableBody");
+const browserSearchTerm = document.getElementById("browserSearchTerm");
+const browserSearchButton = document.getElementById("browserSearchButton");
+const browserSearchClear = document.getElementById("browserSearchClear");
+const statusLogSearch = document.getElementById("statusLogSearch");
+const searchTableBody = document.getElementById("searchTableBody");
 const chatDeckSelect = document.getElementById("chatDeckSelect");
 const refreshDecksChat = document.getElementById("refreshDecksChat");
 const chatModelSelect = document.getElementById("chatModelSelect");
@@ -385,6 +390,12 @@ function updateBrowserControls() {
     loadBrowserButton.disabled = !Boolean(browserDeckSelect?.value);
 }
 
+function updateSearchControls() {
+    if (!browserSearchButton) return;
+    const hasTerm = Boolean(browserSearchTerm?.value?.trim());
+    browserSearchButton.disabled = !hasTerm;
+}
+
 function updateChatControls() {
     if (!chatAskButton) return;
     const hasDeck = Boolean(chatDeckSelect?.value);
@@ -651,6 +662,31 @@ browserDeckSelect.addEventListener("change", () => {
 
 loadBrowserButton.addEventListener("click", loadBrowser);
 
+if (browserSearchTerm) {
+    browserSearchTerm.addEventListener("input", updateSearchControls);
+    browserSearchTerm.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            if (!browserSearchButton?.disabled) {
+                searchDecks();
+            }
+        }
+    });
+}
+if (browserSearchButton) {
+    browserSearchButton.addEventListener("click", searchDecks);
+}
+if (browserSearchClear) {
+    browserSearchClear.addEventListener("click", () => {
+        if (browserSearchTerm) browserSearchTerm.value = "";
+        updateSearchControls();
+        setStatus(statusLogSearch, "Enter a word to find matching cards.");
+        if (searchTableBody) {
+            searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">No search yet.</td></tr>`;
+        }
+    });
+}
+
 if (chatDeckSelect) {
     chatDeckSelect.addEventListener("change", () => {
         updateChatControls();
@@ -685,13 +721,16 @@ function renderGallery(items) {
     }
     galleryGrid.classList.remove("empty");
     galleryGrid.innerHTML = items
-        .map(
-            (item) => `
+        .map((item) => {
+            const frontText = item.front_text || "(No Front text)";
+            const backText = item.back_text || "(No Back text)";
+            const imageSide = item.image_side ? `Image on ${item.image_side}` : "Image";
+            return `
             <div class="image-card" data-sound="${item.sound_filename || ""}">
-                <img src="${item.image_url}" alt="${item.english}" loading="lazy" />
-                <div class="caption">${item.front_text || "(No Front text)"}</div>
-            </div>`
-        )
+                <img src="${item.image_url}" alt="${frontText}" loading="lazy" />
+                <div class="caption">${imageSide}<br />Front: ${frontText}<br />Back: ${backText}</div>
+            </div>`;
+        })
         .join("");
 }
 
@@ -807,6 +846,52 @@ async function loadBrowser() {
     }
 }
 
+function renderSearchTable(results) {
+    if (!searchTableBody) return;
+    if (!results.length) {
+        searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">No matches found.</td></tr>`;
+        return;
+    }
+    searchTableBody.innerHTML = "";
+    results.forEach((result) => {
+        const tr = document.createElement("tr");
+        const cells = [result.deck, result.front, result.back, result.match || ""];
+        cells.forEach((value) => {
+            const td = document.createElement("td");
+            td.textContent = value || "";
+            tr.appendChild(td);
+        });
+        searchTableBody.appendChild(tr);
+    });
+}
+
+async function searchDecks() {
+    const term = browserSearchTerm?.value?.trim();
+    if (!term) {
+        setStatus(statusLogSearch, "Enter a word to search.");
+        return;
+    }
+    setStatus(statusLogSearch, `Searching for "${term}"...`);
+    try {
+        const response = await fetch(`/api/deck-search?term=${encodeURIComponent(term)}`);
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+            throw new Error(data.message || "Search failed.");
+        }
+        renderSearchTable(data.results || []);
+        if ((data.results || []).length) {
+            setStatus(statusLogSearch, `Found ${data.results.length} match(es) for "${term}".`);
+        } else {
+            setStatus(statusLogSearch, `No matches found for "${term}".`);
+        }
+    } catch (error) {
+        setStatus(statusLogSearch, `❌ Search failed: ${error}`);
+        if (searchTableBody) {
+            searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Unable to load results.</td></tr>`;
+        }
+    }
+}
+
 loadDecks();
 loadModels("text", textModelSelect, "gpt-4.1-mini", statusLogSync, updateSyncButton);
 loadModels("audio", audioModelSelect, "gpt-4o-mini-tts", statusLogAudio, updateAudioControls);
@@ -819,6 +904,7 @@ updateAudioControls();
 updateImageControls();
 updateGalleryControls();
 updateBrowserControls();
+updateSearchControls();
 updateAudioCoverage();
 updateImageCoverage();
 loadTabFromHash();

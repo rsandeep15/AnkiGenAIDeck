@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 from openai import OpenAI
 
 from config import DEFAULT_TEXT_MODEL
+from utils.common import collapse_whitespace, strip_english_duplicate
 from utils.anki_connect import invoke
 
 # Function to create a file with the Files API
@@ -46,6 +47,14 @@ def parse_args():
         "--dry-run",
         action="store_true",
         help="Parse the PDF and print a summary without writing to Anki.",
+    )
+    parser.add_argument(
+        "--note-model",
+        default="Basic",
+        help=(
+            "Anki note type to use for imported cards (default: %(default)s). "
+            "Use 'Basic (type in the answer)' if you explicitly want typed-answer cards."
+        ),
     )
     romanized_group = parser.add_mutually_exclusive_group()
     romanized_group.add_argument(
@@ -125,10 +134,10 @@ def parse_word_pairs(raw_output: str) -> List[Dict[str, Any]]:
     return parsed
 
 
-def build_note(deckname: str, front: str, back: str) -> Dict[str, Any]:
+def build_note(deckname: str, front: str, back: str, model_name: str) -> Dict[str, Any]:
     return {
         "deckName": deckname,
-        "modelName": "Basic (type in the answer)",
+        "modelName": model_name,
         "fields": {
             "Front": front,
             "Back": back,
@@ -188,13 +197,14 @@ def main():
         foreign_word = vocab_pair.get("foreign")
         if not english or not foreign_word:
             continue
-        english_clean = english.strip()
-        foreign_clean = foreign_word.strip()
+        english_clean = collapse_whitespace(english)
+        foreign_clean = collapse_whitespace(foreign_word)
         if not english_clean or not foreign_clean:
             continue
+        foreign_clean = strip_english_duplicate(foreign_clean, english_clean)
         romanized = vocab_pair.get("romanized") if args.include_romanized else None
         if romanized:
-            romanized = romanized.strip()
+            romanized = collapse_whitespace(romanized)
             if not romanized:
                 romanized = None
         if romanized:
@@ -204,7 +214,12 @@ def main():
         if foreign_clean in notes:
             print(f"Skipping duplicate entry for: {foreign_clean}")
             continue
-        notes[foreign_clean] = build_note(deckname, foreign_display, english_clean)
+        notes[foreign_clean] = build_note(
+            deckname,
+            foreign_display,
+            english_clean,
+            args.note_model,
+        )
 
     if args.dry_run:
         print(f"{len(notes)} notes ready. Dry-run mode; no changes made.")

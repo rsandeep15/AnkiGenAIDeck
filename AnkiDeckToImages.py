@@ -3,6 +3,8 @@ import json
 import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
+import random
+import re
 from pathlib import Path
 from typing import Any, List, Tuple
 
@@ -23,6 +25,31 @@ from utils.common import (
     NBSP_RE,
 )
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+EMOTION_TERMS = {
+    "happy",
+    "angry",
+    "sad",
+    "bored",
+    "worry",
+    "worried",
+    "tired",
+    "glad",
+    "satisfied",
+    "uncomfortable",
+    "nervous",
+    "scary",
+    "scared",
+    "excited",
+    "joyful",
+    "comfortable",
+    "shy",
+    "lonely",
+    "surprised",
+    "relaxed",
+    "anxious",
+    "calm",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -59,6 +86,23 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="List eligible cards and print a summary without writing to Anki.",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Process only the first N candidates after optional shuffling (default: all).",
+    )
+    parser.add_argument(
+        "--shuffle",
+        action="store_true",
+        help="Shuffle candidate order before applying --limit.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed used with --shuffle for reproducible batches (default: %(default)s).",
+    )
     return parser.parse_args()
 
 
@@ -81,6 +125,21 @@ def get_candidate_cards(deckname: str) -> List[Tuple[int, str, str]]:
         back_text = note["fields"]["Back"]["value"]
         candidates.append((card_id, front_text, back_text))
     return candidates
+
+
+def select_candidates(
+    candidates: List[Tuple[int, str, str]],
+    *,
+    limit: int,
+    shuffle: bool,
+    seed: int,
+) -> List[Tuple[int, str, str]]:
+    selected = list(candidates)
+    if shuffle:
+        random.Random(seed).shuffle(selected)
+    if limit > 0:
+        selected = selected[:limit]
+    return selected
 
 
 def sanitize_text(text: str) -> str:
@@ -133,11 +192,47 @@ def get_response_text(resp: Any) -> str:
     return "".join(parts)
 
 
+def parse_gating_decision(raw: str) -> bool:
+    decision = (raw or "").strip().lower()
+    if not decision:
+        return False
+    if decision in {"true", "yes", "1"}:
+        return True
+    if decision in {"false", "no", "0"}:
+        return False
+    if re.match(r"^true\b", decision):
+        return True
+    if re.match(r"^false\b", decision):
+        return False
+    try:
+        payload = json.loads(decision)
+        if isinstance(payload, bool):
+            return payload
+        if isinstance(payload, dict):
+            for key in ("allow", "should_generate", "generate"):
+                value = payload.get(key)
+                if isinstance(value, bool):
+                    return value
+    except json.JSONDecodeError:
+        pass
+    return False
+
+
+def emotion_state_prior(front_text: str, back_text: str) -> bool:
+    text = f"{front_text} {back_text}".lower()
+    if re.search(r"\bto\s+(be|feel)\b", text):
+        return True
+    return any(term in text for term in EMOTION_TERMS)
+
+
 def should_generate_image(
     client: OpenAI,
     front_text: str,
     back_text: str,
 ) -> bool:
+    if emotion_state_prior(front_text, back_text):
+        return True
+
     prompt_payload = {
         "id": GATING_PROMPT_ID,
         "version": GATING_PROMPT_VERSION,
@@ -149,8 +244,8 @@ def should_generate_image(
     response = client.responses.create(
         prompt=prompt_payload,
     )
-    decision = get_response_text(response).strip().lower()
-    return decision == "true"
+    decision = get_response_text(response)
+    return parse_gating_decision(decision)
 
 
 def process_card(
@@ -168,17 +263,19 @@ def process_card(
     cleaned_back = sanitize_text(back_without_images)
     if not cleaned_back:
         return ("skip", back_without_images, "No descriptive text after cleaning.")
-    if dry_run:
-        return ("dry_run", back_without_images, None)
 
     try:
+        should_generate = True
         if not skip_gating:
             cleaned_front = sanitize_text(front_without_images)
-            if not should_generate_image(
+            should_generate = should_generate_image(
                 local_client,
                 cleaned_front or front_without_images,
                 cleaned_back,
-            ):
+            )
+            if not should_generate:
+                if dry_run:
+                    return ("would_skip", back_without_images, "Gating model returned false.")
                 if (
                     front_without_images != front_text
                     or back_without_images != back_text
@@ -199,6 +296,10 @@ def process_card(
                         "Gating model returned false; existing image removed.",
                     )
                 return ("skip", back_without_images, "Gating model returned false.")
+        if dry_run:
+            if should_generate:
+                return ("would_add", back_without_images, None)
+            return ("would_skip", back_without_images, "Gating model returned false.")
 
         filename = f"{card_id}.png"
         prompt = build_image_prompt(prompt_template, cleaned_back)
@@ -214,7 +315,7 @@ def process_card(
                 "picture": [
                     {
                         "filename": filename,
-                        "fields": ["Back"],
+                        "fields": ["Front"],
                         "path": file_path.as_posix(),
                     }
                 ],
@@ -234,23 +335,19 @@ def main() -> None:
     if not candidates:
         print(f"No cards eligible for image generation in deck '{args.deck}'.")
         return
+    candidates = select_candidates(
+        candidates,
+        limit=args.limit,
+        shuffle=args.shuffle,
+        seed=args.seed,
+    )
+    if args.shuffle:
+        print(f"Shuffled candidates with seed={args.seed}.")
+    if args.limit > 0:
+        print(f"Processing a limited batch of {len(candidates)} candidate(s).")
 
     if args.dry_run:
-        print("Dry-run mode; no images will be generated.")
-        for card_id, front_text, back_text in candidates[:10]:
-            print(f"- {front_text} — {back_text}")
-        summary = {
-            "ok": True,
-            "dry_run": True,
-            "deck": args.deck,
-            "candidates": len(candidates),
-            "added": 0,
-            "skipped": 0,
-            "failed": 0,
-            "dry_run_count": len(candidates),
-        }
-        print(f"SUMMARY: {json.dumps(summary, ensure_ascii=False)}")
-        return
+        print("Dry-run mode; evaluating gating decisions without generating images.")
 
     worker_limit = max(1, args.workers)
     max_workers = max(1, min(worker_limit, len(candidates)))
@@ -287,6 +384,12 @@ def main() -> None:
                 skipped += 1
             elif status == "dry_run":
                 dry_run_count += 1
+            elif status == "would_add":
+                print(f"Would add image for: {back_text}")
+                added += 1
+            elif status == "would_skip":
+                print(f"Would skip image for: {back_text} ({error})")
+                skipped += 1
             else:
                 print(f"Failed image for: {back_text} ({error})")
                 failed += 1

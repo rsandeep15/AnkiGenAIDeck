@@ -53,6 +53,7 @@ os.makedirs(app.instance_path, exist_ok=True)
 PROGRESS_RE = re.compile(r"^PROGRESS\s+(\d+)\s*/\s*(\d+)\s*$")
 SUMMARY_RE = re.compile(r"^SUMMARY:\s*(\{.*\})\s*$")
 TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
+SEARCH_TERM_RE = re.compile(r"[\n\r\t]+")
 
 
 @dataclass
@@ -448,9 +449,12 @@ def deck_images():
         for note_id, note in zip(note_ids, notes):
             front = note["fields"]["Front"]["value"]
             back = note["fields"]["Back"]["value"]
-            filename = extract_image_filename(front) or extract_image_filename(back)
+            front_image = extract_image_filename(front)
+            back_image = extract_image_filename(back)
+            filename = front_image or back_image
             if not filename:
                 continue
+            image_side = "Front" if front_image else "Back"
             local_path = IMAGE_DIR / filename
             if not local_path.exists():
                 stem, suffix = os.path.splitext(filename)
@@ -468,6 +472,8 @@ def deck_images():
                     "card_id": note_id,
                     "english": clean_field_text(back),
                     "front_text": clean_field_text(front),
+                    "back_text": clean_field_text(back),
+                    "image_side": image_side,
                     "sound_filename": extract_sound_filename(front) or extract_sound_filename(back),
                     "image_url": url_for("serve_image_file", filename=local_path.name),
                 }
@@ -514,6 +520,74 @@ def deck_cards():
                 }
             )
         return jsonify({"ok": True, "cards": cards})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
+@app.route("/api/deck-search", methods=["GET"])
+def deck_search():
+    term = request.args.get("term", "")
+    limit_raw = request.args.get("limit", "50")
+    term = normalize_search_term(term)
+    if not term:
+        return jsonify({"ok": False, "message": "Search term is required."}), 400
+
+    try:
+        limit = int(limit_raw)
+    except (TypeError, ValueError):
+        limit = 50
+    limit = max(1, min(200, limit))
+
+    try:
+        query = f"({build_field_query('Front', term)} OR {build_field_query('Back', term)})"
+        card_ids = invoke("findCards", query=query) or []
+        if not card_ids:
+            return jsonify({"ok": True, "results": []})
+
+        card_ids = card_ids[:limit]
+        cards = invoke("cardsInfo", cards=card_ids) or []
+        deck_by_note: dict[int, str] = {}
+        note_ids: list[int] = []
+        for card in cards:
+            note_id = card.get("note")
+            if not note_id:
+                continue
+            if note_id not in deck_by_note:
+                deck_by_note[note_id] = card.get("deckName") or "Unknown"
+            note_ids.append(note_id)
+
+        unique_note_ids = list(dict.fromkeys(note_ids))
+        notes = invoke("notesInfo", notes=unique_note_ids) if unique_note_ids else []
+        results = []
+        term_lower = term.lower()
+        for note_id, note in zip(unique_note_ids, notes):
+            fields = note.get("fields", {})
+            front = clean_field_text((fields.get("Front") or {}).get("value", ""))
+            back = clean_field_text((fields.get("Back") or {}).get("value", ""))
+            romanized = clean_field_text((fields.get("Romanized") or {}).get("value", ""))
+            deck_name = deck_by_note.get(note_id, "Unknown")
+            in_front = term_lower in front.lower()
+            in_back = term_lower in back.lower()
+            if in_front and in_back:
+                match = "both"
+            elif in_front:
+                match = "front"
+            elif in_back:
+                match = "back"
+            else:
+                match = ""
+            results.append(
+                {
+                    "id": note_id,
+                    "deck": deck_name,
+                    "front": front,
+                    "back": back,
+                    "romanized": romanized,
+                    "match": match,
+                }
+            )
+
+        return jsonify({"ok": True, "results": results})
     except Exception as exc:
         return jsonify({"ok": False, "message": str(exc)}), 500
 
@@ -773,6 +847,19 @@ def clean_field_text(raw: str) -> str:
     without_nbsp = NBSP_RE.sub(" ", without_sound)
     without_tags = HTML_TAG_RE.sub(" ", without_nbsp)
     return " ".join(without_tags.split())
+
+
+def normalize_search_term(term: str) -> str:
+    cleaned = (term or "").strip()
+    cleaned = SEARCH_TERM_RE.sub(" ", cleaned)
+    cleaned = cleaned.replace('"', "").replace("'", "")
+    return " ".join(cleaned.split())
+
+
+def build_field_query(field: str, term: str) -> str:
+    if " " in term:
+        return f'{field}:"{term}"'
+    return f"{field}:*{term}*"
 
 
 def extract_image_filename(html: str) -> str:

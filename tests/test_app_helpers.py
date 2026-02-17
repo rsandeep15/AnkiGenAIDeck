@@ -133,6 +133,14 @@ class TestAppUtilities(unittest.TestCase):
 
         self.assertEqual(app.get_response_text(FakeResponse()), "hello")
 
+    def test_normalize_search_term_strips_quotes_and_whitespace(self) -> None:
+        raw = "  hello\n\t\"world\"  "
+        self.assertEqual(app.normalize_search_term(raw), "hello world")
+
+    def test_build_field_query_handles_single_and_multi_word_terms(self) -> None:
+        self.assertEqual(app.build_field_query("Front", "hello"), "Front:*hello*")
+        self.assertEqual(app.build_field_query("Back", "hello world"), 'Back:"hello world"')
+
 
 class TestDeckChatContext(unittest.TestCase):
     @patch("app.invoke")
@@ -183,6 +191,38 @@ class TestDeckChatContext(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertFalse(data["ok"])
+
+    @patch("app.invoke")
+    def test_deck_search_requires_term_param(self, mock_invoke) -> None:
+        client = app.app.test_client()
+        response = client.get("/api/deck-search")
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertFalse(data["ok"])
+        mock_invoke.assert_not_called()
+
+    @patch("app.invoke")
+    def test_deck_search_returns_matches(self, mock_invoke) -> None:
+        mock_invoke.side_effect = [
+            [10],
+            [{"note": 42, "deckName": "AdvancedBeginner1::Grammar"}],
+            [
+                {
+                    "fields": {
+                        "Front": {"value": "성격"},
+                        "Back": {"value": "personality"},
+                    }
+                }
+            ],
+        ]
+        client = app.app.test_client()
+        response = client.get("/api/deck-search?term=personality")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(len(data["results"]), 1)
+        self.assertEqual(data["results"][0]["deck"], "AdvancedBeginner1::Grammar")
+        self.assertEqual(data["results"][0]["match"], "back")
 
 
 if __name__ == "__main__":

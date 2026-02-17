@@ -15,8 +15,9 @@ class TestAnkiSyncHelpers(unittest.TestCase):
         self.assertEqual(result[0]["english"], "hi")
 
     def test_build_note_structure(self) -> None:
-        note = sync.build_note("Deck", "Front", "Back")
+        note = sync.build_note("Deck", "Front", "Back", "Basic")
         self.assertEqual(note["deckName"], "Deck")
+        self.assertEqual(note["modelName"], "Basic")
         self.assertEqual(note["fields"]["Front"], "Front")
         self.assertEqual(note["fields"]["Back"], "Back")
 
@@ -36,6 +37,18 @@ class TestAnkiSyncHelpers(unittest.TestCase):
 
         prompt = sync.build_prompt(include_romanized=False)
         self.assertIn("Do not include romanization keys", prompt)
+
+    def test_strip_english_duplicate_suffix(self) -> None:
+        self.assertEqual(
+            sync.strip_english_duplicate("성격 personality", "personality"),
+            "성격",
+        )
+
+    def test_strip_english_duplicate_parenthetical(self) -> None:
+        self.assertEqual(
+            sync.strip_english_duplicate("성격 (personality)", "personality"),
+            "성격",
+        )
 
 
 if __name__ == "__main__":

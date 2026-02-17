@@ -153,6 +153,38 @@
                 <button id="loadBrowser" class="accent-button" disabled>Load Deck</button>
             </div>
 
+            <div class="card">
+                <h2>Search Across Decks</h2>
+                <label for="browserSearchTerm">English word</label>
+                <input id="browserSearchTerm" type="text" placeholder="Type an English word">
+                <div class="deck-select-controls">
+                    <button id="browserSearchButton" class="accent-button" disabled>Search</button>
+                    <button id="browserSearchClear" class="secondary-button">Clear</button>
+                </div>
+            </div>
+
+            <section class="status-panel">
+                <h2>Search Results</h2>
+                <p id="statusLogSearch">Enter a word to find matching cards.</p>
+                <div class="table-wrapper">
+                    <table class="deck-table">
+                        <thead>
+                            <tr>
+                                <th>Deck</th>
+                                <th>Front</th>
+                                <th>Back</th>
+                                <th>Match</th>
+                            </tr>
+                        </thead>
+                        <tbody id="searchTableBody">
+                            <tr>
+                                <td colspan="4" class="empty-row">No search yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <section class="status-panel">
                 <h2>Word Pairs</h2>
                 <p id="statusLogBrowser">Select a deck to view its cards.</p>
