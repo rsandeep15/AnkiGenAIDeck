@@ -2,12 +2,24 @@
 
 This repo already wraps OpenAI + AnkiConnect; this page gives a fast “agent-first” map for Codex (or any LLM ops) to work safely and quickly.
 
+## Tool-First Rule (Important)
+- Prefer the canonical wrapper tools before writing bespoke AnkiConnect code.
+- Start discovery with `agent_tools.json` and `scripts/agent_tools.py`.
+- Only drop to raw AnkiConnect calls when the wrapper cannot perform the requested task.
+- If using raw AnkiConnect, explain why wrapper tools were insufficient.
+
 ## Core Surfaces
 - **Scripts**: `AnkiSync.py` (PDF ➜ deck), `AnkiDeckToSpeech.py` (TTS audio), `AnkiDeckToImages.py` (image generation), Flask UI `app.py` (tabs for sync/audio/images/gallery/deck browser).
+- **Agent wrapper**: `scripts/agent_tools.py` with machine-readable manifest in `agent_tools.json`.
 - **Backend APIs**:
   - OpenAI (text/audio/image models) via `openai` SDK.
   - AnkiConnect at `http://127.0.0.1:8765` using JSON RPC (see cheatsheet below).
 - **Helpers**: `utils/common.py` for paths (`BASE_DIR`, `IMAGE_DIR`, `MEDIA_DIR`) and HTML/sound stripping regexes.
+
+## Agent Tool Registry
+- List tools (machine-readable): `.venv/bin/python scripts/agent_tools.py list`
+- Manifest location: `agent_tools.json`
+- Wrapper entrypoint: `scripts/agent_tools.py`
 
 ## Env & Secrets
 - `.env` (used by Flask and scripts): `OPENAI_API_KEY`, `FLASK_APP=app.py`.
@@ -56,10 +68,10 @@ Common calls:
 - Network: OpenAI calls require `OPENAI_API_KEY`; local AnkiConnect only.
 
 ## Task Recipes (for agents)
-- **Sync a PDF**: `python AnkiSync.py path/to.pdf --deck "MyDeck" --model gpt-4.1-mini --romanized/--no-romanized`
-- **Generate audio**: `python AnkiDeckToSpeech.py "MyDeck" --model gpt-4o-mini-tts --voice onyx --workers 8`
-- **Generate images**: `python AnkiDeckToImages.py "MyDeck" --image-model gpt-image-1 --workers 3 --skip-gating`
-- **Run UI**: `flask run` (with venv + `.env`), open http://127.0.0.1:5000/
+- **Sync a PDF**: `.venv/bin/python scripts/agent_tools.py sync --pdf path/to.pdf --deck "MyDeck" --model gpt-4.1-mini --romanized`
+- **Generate audio**: `.venv/bin/python scripts/agent_tools.py audio --deck "MyDeck" --model gpt-4o-mini-tts --voice onyx --workers 10`
+- **Generate images**: `.venv/bin/python scripts/agent_tools.py images --deck "MyDeck" --image-model gpt-image-1 --workers 3`
+- **Run UI**: `.venv/bin/python scripts/agent_tools.py ui --port 5000`, then open http://127.0.0.1:5000/
 - **List decks (AnkiConnect)**: POST `{"action":"deckNames","params":{},"version":6}` to `http://127.0.0.1:8765`
 
 ## Converting to “agents-first”

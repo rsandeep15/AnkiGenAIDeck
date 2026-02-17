@@ -24,4 +24,5 @@ prompt_variants.jsonl
 scripts/anki_deck_summary.py
 scripts/chat_eval.py
 scripts/prompts_korean.txt
-scripts/
+scripts/*
+!scripts/agent_tools.py

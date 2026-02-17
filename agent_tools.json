@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "entrypoint": "scripts/agent_tools.py",
+  "policy": {
+    "prefer_tools_first": true,
+    "guidance": "Use these workflows before writing bespoke AnkiConnect calls. Only use raw AnkiConnect for unsupported operations."
+  },
+  "tools": [
+    {
+      "id": "sync_pdf_to_deck",
+      "description": "Parse a PDF and create/update an Anki deck with extracted vocabulary.",
+      "invoke": "python scripts/agent_tools.py sync --pdf <path/to.pdf> --deck <deck_name> --model <text_model> [--romanized] [--dry-run]",
+      "backend_script": "AnkiSync.py"
+    },
+    {
+      "id": "generate_audio_for_deck",
+      "description": "Generate TTS pronunciation audio for deck cards lacking sound.",
+      "invoke": "python scripts/agent_tools.py audio --deck <deck_name> --model <tts_model> --voice <voice> --workers <n> [--dry-run]",
+      "backend_script": "AnkiDeckToSpeech.py"
+    },
+    {
+      "id": "generate_images_for_deck",
+      "description": "Generate mnemonic images for deck cards via prompt-managed gating.",
+      "invoke": "python scripts/agent_tools.py images --deck <deck_name> --image-model <image_model> --workers <n> [--limit <n> --shuffle --seed <n>] [--dry-run]",
+      "backend_script": "AnkiDeckToImages.py"
+    },
+    {
+      "id": "run_web_ui",
+      "description": "Run the local Flask UI for sync/audio/images/gallery workflows.",
+      "invoke": "python scripts/agent_tools.py ui --port 5000",
+      "backend_script": "app.py"
+    }
+  ]
+}
