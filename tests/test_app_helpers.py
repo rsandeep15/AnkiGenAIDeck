@@ -224,6 +224,39 @@ class TestDeckChatContext(unittest.TestCase):
         self.assertEqual(data["results"][0]["deck"], "AdvancedBeginner1::Grammar")
         self.assertEqual(data["results"][0]["match"], "back")
 
+    @patch("app.invoke")
+    def test_deck_gallery_includes_items_without_images(self, mock_invoke) -> None:
+        mock_invoke.side_effect = [
+            [101, 102],
+            [
+                {
+                    "fields": {
+                        "Front": {"value": '<img src="101.png">안녕'},
+                        "Back": {"value": "hello"},
+                    }
+                },
+                {
+                    "fields": {
+                        "Front": {"value": "감사합니다"},
+                        "Back": {"value": "thank you"},
+                    }
+                },
+            ],
+        ]
+        image_path = app.IMAGE_DIR / "101.png"
+        image_path.write_bytes(b"fake")
+        client = app.app.test_client()
+        response = client.get("/api/deck-gallery?deck=Test")
+        data = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["total"], 2)
+        self.assertEqual(len(data["items"]), 2)
+        has_image_values = [item["has_image"] for item in data["items"]]
+        self.assertIn(True, has_image_values)
+        self.assertIn(False, has_image_values)
+        image_path.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

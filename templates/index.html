@@ -12,7 +12,6 @@
 
         <nav class="tabs">
             <button class="tab-button active" data-tab="sync">PDF ➜ Deck</button>
-            <button class="tab-button" data-tab="audio">Deck Audio</button>
             <button class="tab-button" data-tab="images">Deck Library</button>
             <button class="tab-button" data-tab="chat">Deck Chat</button>
         </nav>
@@ -45,110 +44,58 @@
             </div>
         </section>
 
-        <section id="tab-audio" class="tab-panel">
-            <div class="card">
-                <h2>Generate Audio</h2>
-                <label for="audioDeckSelect">Deck</label>
-                <div class="deck-select-controls">
-                    <select id="audioDeckSelect">
-                        <option value="">Loading decks...</option>
-                    </select>
-                    <button id="refreshDecksAudio" class="secondary-button">Refresh</button>
-                </div>
-                <div id="audioCoverageBadge" class="coverage-badge"></div>
-
-                <label for="audioModelSelect">Audio Model</label>
-                <select id="audioModelSelect">
-                    <option value="">Loading models...</option>
-                </select>
-
-                <label for="audioWorkerSelect">Concurrent Workers</label>
-                <select id="audioWorkerSelect">
-                    <option value="3">3</option>
-                    <option value="5">5</option>
-                    <option value="8">8</option>
-                    <option value="10" selected>10</option>
-                    <option value="12">12</option>
-                    <option value="15">15</option>
-                </select>
-
-                <button id="generateAudio" class="accent-button audio-button" disabled>Generate Audio</button>
-                <div class="card-divider"></div>
-                <h3 class="card-subtitle">Audio Generation Log</h3>
-                <pre id="statusLogAudio">Select a deck to begin.</pre>
-            </div>
-        </section>
-
         <section id="tab-images" class="tab-panel">
             <div class="card">
                 <h2>Browse Deck Library</h2>
-                <label for="imageDeckSelect">Deck</label>
-                <div class="deck-select-controls">
-                    <select id="imageDeckSelect">
-                        <option value="">Loading decks...</option>
-                    </select>
-                    <button id="refreshDecksImages" class="secondary-button">Refresh</button>
-                </div>
-                <div class="field-row">
+                <div class="deck-library-grid">
+                    <div class="deck-library-row deck-library-row-full">
+                        <label for="imageDeckSelect">Deck</label>
+                        <div class="deck-select-controls">
+                            <select id="imageDeckSelect">
+                                <option value="">Loading decks...</option>
+                            </select>
+                            <button id="refreshDecksImages" class="secondary-button">Refresh</button>
+                        </div>
+                    </div>
                     <div class="field compact">
                         <label>Image Coverage</label>
                         <div id="imageCoverageBadge" class="coverage-badge"></div>
                     </div>
+                    <div class="field compact">
+                        <label>Audio Coverage</label>
+                        <div id="audioCoverageBadge" class="coverage-badge"></div>
+                    </div>
+                    <div class="field">
+                        <label for="audioModelSelect">Audio Model</label>
+                        <select id="audioModelSelect">
+                            <option value="">Loading models...</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="imageModelSelect">Image Model</label>
+                        <select id="imageModelSelect">
+                            <option value="">Loading models...</option>
+                        </select>
+                    </div>
+                    <div class="button-row dual-cta-row deck-library-row-full">
+                        <button id="generateAudio" class="secondary-button" disabled>Generate Audio</button>
+                        <button id="generateImages" class="accent-button image-button" disabled>Generate Images</button>
+                    </div>
+                </div>
+                <div id="mediaLogContainer" class="inline-log is-hidden">
+                    <h3 class="card-subtitle">Generation Log</h3>
+                    <pre id="statusLogMedia">Select a deck to begin.</pre>
                 </div>
             </div>
-
-            <div class="card">
-                <h2>Search Across Decks</h2>
-                <label for="browserSearchTerm">English word</label>
-                <input id="browserSearchTerm" type="text" placeholder="Type an English word">
-                <div class="deck-select-controls">
-                    <button id="browserSearchClear" class="secondary-button">Clear</button>
-                </div>
-                <p id="statusLogSearch">Enter a word to find matching cards.</p>
-                <div class="table-wrapper">
-                    <table class="deck-table">
-                        <thead>
-                            <tr>
-                                <th>Deck</th>
-                                <th>Front</th>
-                                <th>Back</th>
-                                <th>Match</th>
-                            </tr>
-                        </thead>
-                        <tbody id="searchTableBody">
-                            <tr>
-                                <td colspan="4" class="empty-row">No search yet.</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <section class="status-panel">
-                <h2>Word Pairs</h2>
-                <p id="statusLogBrowser">Select a deck to view its cards.</p>
-                <div class="table-wrapper">
-                    <table class="deck-table">
-                        <thead>
-                            <tr>
-                                <th>Front</th>
-                                <th>Back</th>
-                            </tr>
-                        </thead>
-                        <tbody id="browserTableBody">
-                            <tr>
-                                <td colspan="2" class="empty-row">No deck selected.</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
 
             <section class="status-panel">
                 <div class="panel-header">
                     <h2>Deck Gallery</h2>
                     <span class="panel-note">Auto-updates on deck selection</span>
                 </div>
+                <label for="browserSearchTerm" class="sr-only">Filter current deck</label>
+                <input id="browserSearchTerm" type="text" placeholder="Type to filter Front/Back">
+                <p id="statusLogSearch">Type to filter cards in the selected deck.</p>
                 <p id="statusLogGallery">Select a deck to view generated images.</p>
                 <div class="gallery-controls">
                     <button id="galleryPrev" class="secondary-button" disabled>Prev</button>
@@ -160,36 +107,6 @@
                 </div>
             </section>
 
-            <div class="card">
-                <h2>Generate Images</h2>
-                <div class="field-row">
-                    <div class="field">
-                        <label for="imageModelSelect">Image Model</label>
-                        <select id="imageModelSelect">
-                            <option value="">Loading models...</option>
-                        </select>
-                    </div>
-                </div>
-
-                <label class="checkbox-row">
-                    <input id="skipGatingToggle" type="checkbox">
-                    Skip gating check
-                </label>
-
-                <label for="imageWorkerSelect">Concurrent Workers</label>
-                <select id="imageWorkerSelect">
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3" selected>3</option>
-                    <option value="4">4</option>
-                    <option value="5">5</option>
-                </select>
-
-                <button id="generateImages" class="accent-button image-button" disabled>Generate Images</button>
-                <div class="card-divider"></div>
-                <h3 class="card-subtitle">Image Generation Log</h3>
-                <pre id="statusLogImages">Select a deck and model to begin.</pre>
-            </div>
         </section>
 
         <section id="tab-chat" class="tab-panel">

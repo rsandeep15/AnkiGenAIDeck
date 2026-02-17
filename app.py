@@ -494,6 +494,95 @@ def deck_images():
         return jsonify({"ok": False, "message": str(exc)}), 500
 
 
+@app.route("/api/deck-gallery", methods=["GET"])
+def deck_gallery():
+    deck = request.args.get("deck", "").strip()
+    term = normalize_search_term(request.args.get("term", ""))
+    if not deck:
+        return jsonify({"ok": False, "message": "Deck parameter is required."}), 400
+    try:
+        page = int(request.args.get("page", "1"))
+        page_size = int(request.args.get("page_size", "24"))
+    except ValueError:
+        return jsonify({"ok": False, "message": "Invalid page or page_size."}), 400
+    if page < 1 or page_size < 1 or page_size > 200:
+        return jsonify({"ok": False, "message": "Invalid page or page_size."}), 400
+
+    try:
+        query = f'deck:"{deck}"'
+        if term:
+            query = (
+                f'deck:"{deck}" '
+                f'({build_field_query("Front", term)} OR {build_field_query("Back", term)})'
+            )
+        note_ids = invoke("findNotes", query=query) or []
+        if not note_ids:
+            return jsonify(
+                {
+                    "ok": True,
+                    "items": [],
+                    "page": page,
+                    "page_size": page_size,
+                    "total": 0,
+                    "term": term,
+                }
+            )
+
+        notes = invoke("notesInfo", notes=note_ids)
+        results = []
+        for note_id, note in zip(note_ids, notes):
+            fields = note.get("fields", {})
+            front_raw = (fields.get("Front") or {}).get("value", "")
+            back_raw = (fields.get("Back") or {}).get("value", "")
+            front_image = extract_image_filename(front_raw)
+            back_image = extract_image_filename(back_raw)
+            filename = front_image or back_image
+            image_url = ""
+            if filename:
+                local_path = IMAGE_DIR / filename
+                if not local_path.exists():
+                    stem, suffix = os.path.splitext(filename)
+                    if "-" in stem:
+                        base = stem.split("-", 1)[0] + suffix
+                        alt_path = IMAGE_DIR / base
+                        if alt_path.exists():
+                            local_path = alt_path
+                        else:
+                            local_path = None
+                    else:
+                        local_path = None
+                if local_path and local_path.exists():
+                    image_url = url_for("serve_image_file", filename=local_path.name)
+
+            results.append(
+                {
+                    "id": note_id,
+                    "front_text": clean_field_text(front_raw),
+                    "back_text": clean_field_text(back_raw),
+                    "has_image": bool(image_url),
+                    "image_url": image_url,
+                    "image_side": "Front" if front_image else ("Back" if back_image else ""),
+                    "sound_filename": extract_sound_filename(front_raw) or extract_sound_filename(back_raw),
+                }
+            )
+
+        total = len(results)
+        start = (page - 1) * page_size
+        end = start + page_size
+        return jsonify(
+            {
+                "ok": True,
+                "items": results[start:end],
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "term": term,
+            }
+        )
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
 @app.route("/api/deck-cards", methods=["GET"])
 def deck_cards():
     deck = request.args.get("deck", "").strip()

@@ -80,6 +80,20 @@ h1 {
     color: #1f2937;
 }
 
+.card-note {
+    margin: -0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+}
+
+.inline-log {
+    margin-top: 0.5rem;
+}
+
+.is-hidden {
+    display: none !important;
+}
+
 .card input[type="text"],
 .card select {
     padding: 0.6rem 0.75rem;
@@ -87,6 +101,16 @@ h1 {
     border: 1px solid var(--border);
     background: #f8fafc;
     color: var(--text);
+}
+
+.status-panel input[type="text"],
+.status-panel select {
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #f8fafc;
+    color: var(--text);
+    width: 100%;
 }
 
 .card textarea {
@@ -143,6 +167,13 @@ h1 {
     }
 
     .card textarea {
+        background: #111827;
+        color: var(--text);
+        border-color: #243045;
+    }
+
+    .status-panel input[type="text"],
+    .status-panel select {
         background: #111827;
         color: var(--text);
         border-color: #243045;
@@ -364,6 +395,11 @@ button:not(:disabled):hover {
     align-items: center;
 }
 
+.filter-controls {
+    padding-top: 0.45rem;
+    padding-bottom: 0.35rem;
+}
+
 .field-row {
     display: grid;
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
@@ -380,10 +416,27 @@ button:not(:disabled):hover {
     margin-top: 0.1rem;
 }
 
+.deck-library-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: end;
+}
+
+.deck-library-row-full {
+    grid-column: 1 / -1;
+}
+
 .button-row {
     display: flex;
     gap: 1rem;
     flex-wrap: wrap;
+}
+
+.dual-cta-row > button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 48px;
 }
 
 .secondary-button {
@@ -423,6 +476,19 @@ button:not(:disabled):hover {
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.4);
 }
 
+.image-placeholder {
+    width: 100%;
+    height: 180px;
+    border-radius: 8px;
+    border: 1px dashed var(--border);
+    background: rgba(15, 23, 42, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
 .image-card .caption {
     font-size: 0.95rem;
     font-weight: 600;
@@ -439,9 +505,18 @@ button:not(:disabled):hover {
     .field-row {
         grid-template-columns: 1fr;
     }
+    .deck-library-grid {
+        grid-template-columns: 1fr;
+    }
+    .deck-library-row-full {
+        grid-column: auto;
+    }
     .panel-header {
         flex-direction: column;
         align-items: flex-start;
+    }
+    .dual-cta-row > button {
+        flex-basis: 100%;
     }
 }
 

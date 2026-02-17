@@ -6,21 +6,20 @@ const deckNameInput = document.getElementById("deckName");
 const textModelSelect = document.getElementById("textModelSelect");
 const romanizedToggle = document.getElementById("romanizedToggle");
 
-const audioDeckSelect = document.getElementById("audioDeckSelect");
+const audioDeckSelect = document.getElementById("audioDeckSelect") || document.getElementById("imageDeckSelect");
 const audioModelSelect = document.getElementById("audioModelSelect");
-const refreshDecksAudio = document.getElementById("refreshDecksAudio");
-const audioWorkerSelect = document.getElementById("audioWorkerSelect");
+const refreshDecksAudio = document.getElementById("refreshDecksAudio") || document.getElementById("refreshDecksImages");
 const generateAudioButton = document.getElementById("generateAudio");
-const statusLogAudio = document.getElementById("statusLogAudio");
+const statusLogMedia = document.getElementById("statusLogMedia");
+const statusLogAudio = document.getElementById("statusLogAudio") || statusLogMedia;
 const audioCoverageBadge = document.getElementById("audioCoverageBadge");
+const mediaLogContainer = document.getElementById("mediaLogContainer");
 
 const imageDeckSelect = document.getElementById("imageDeckSelect");
 const imageModelSelect = document.getElementById("imageModelSelect");
-const skipGatingToggle = document.getElementById("skipGatingToggle");
 const refreshDecksImages = document.getElementById("refreshDecksImages");
-const imageWorkerSelect = document.getElementById("imageWorkerSelect");
 const generateImagesButton = document.getElementById("generateImages");
-const statusLogImages = document.getElementById("statusLogImages");
+const statusLogImages = document.getElementById("statusLogImages") || statusLogMedia;
 const imageCoverageBadge = document.getElementById("imageCoverageBadge");
 
 const statusLogGallery = document.getElementById("statusLogGallery");
@@ -28,13 +27,8 @@ const galleryGrid = document.getElementById("galleryGrid");
 const galleryPrevButton = document.getElementById("galleryPrev");
 const galleryNextButton = document.getElementById("galleryNext");
 const galleryPageInfo = document.getElementById("galleryPageInfo");
-const browserDeckSelect = imageDeckSelect;
-const statusLogBrowser = document.getElementById("statusLogBrowser");
-const browserTableBody = document.getElementById("browserTableBody");
 const browserSearchTerm = document.getElementById("browserSearchTerm");
-const browserSearchClear = document.getElementById("browserSearchClear");
 const statusLogSearch = document.getElementById("statusLogSearch");
-const searchTableBody = document.getElementById("searchTableBody");
 const chatDeckSelect = document.getElementById("chatDeckSelect");
 const refreshDecksChat = document.getElementById("refreshDecksChat");
 const chatModelSelect = document.getElementById("chatModelSelect");
@@ -53,7 +47,6 @@ let galleryPage = 1;
 let galleryTotal = 0;
 let chatHistory = [];
 let searchDebounceTimer = null;
-let searchRequestSeq = 0;
 const SEARCH_DEBOUNCE_MS = 300;
 
 function setStatus(element, message, append = false) {
@@ -291,7 +284,7 @@ function populateDeckSelect(select, decks) {
 }
 
 async function loadDecks() {
-    const selects = [audioDeckSelect, imageDeckSelect, chatDeckSelect];
+    const selects = Array.from(new Set([audioDeckSelect, imageDeckSelect, chatDeckSelect]));
     selects.forEach((select) => {
         if (select) {
             select.innerHTML = '<option value="">Loading decks...</option>';
@@ -301,7 +294,6 @@ async function loadDecks() {
     setStatus(statusLogAudio, "Fetching decks...");
     setStatus(statusLogImages, "Fetching decks...");
     setStatus(statusLogGallery, "Fetching decks...");
-    setStatus(statusLogBrowser, "Fetching decks...");
     if (chatThread) {
         chatHistory = [];
         renderChatThread();
@@ -313,8 +305,7 @@ async function loadDecks() {
             selects.forEach((select) => populateDeckSelect(select, data.decks));
             setStatus(statusLogAudio, "Select a deck and model to begin.");
             setStatus(statusLogImages, "Select a deck and model to begin.");
-            setStatus(statusLogGallery, "Select a deck to view images.");
-            setStatus(statusLogBrowser, "Select a deck to view its word pairs.");
+            setStatus(statusLogGallery, "Select a deck to browse cards.");
             if (chatThread) {
                 chatHistory = [];
                 renderChatThread();
@@ -324,7 +315,6 @@ async function loadDecks() {
             if (imageDeckSelect?.value) {
                 galleryPage = 1;
                 loadGallery();
-                loadBrowser();
             }
         } else {
             const message = data.message || "No decks found.";
@@ -336,7 +326,6 @@ async function loadDecks() {
             setStatus(statusLogAudio, message);
             setStatus(statusLogImages, message);
             setStatus(statusLogGallery, message);
-            setStatus(statusLogBrowser, message);
             if (chatThread) {
                 chatHistory = [{ role: "assistant", content: message }];
                 renderChatThread();
@@ -351,7 +340,6 @@ async function loadDecks() {
         setStatus(statusLogAudio, `❌ Failed to fetch decks: ${error}`);
         setStatus(statusLogImages, `❌ Failed to fetch decks: ${error}`);
         setStatus(statusLogGallery, `❌ Failed to fetch decks: ${error}`);
-        setStatus(statusLogBrowser, `❌ Failed to fetch decks: ${error}`);
         if (chatThread) {
             chatHistory = [{ role: "assistant", content: `❌ Failed to fetch decks: ${error}` }];
             renderChatThread();
@@ -369,16 +357,14 @@ async function loadDecks() {
 
 function updateAudioControls() {
     const hasDeck = Boolean(audioDeckSelect?.value);
-    const hasModel = Boolean(audioModelSelect?.value);
-    const hasWorkers = Boolean(audioWorkerSelect?.value);
-    generateAudioButton.disabled = audioJobRunning || !(hasDeck && hasModel && hasWorkers);
+    const hasModel = audioModelSelect ? Boolean(audioModelSelect?.value) : true;
+    generateAudioButton.disabled = audioJobRunning || !(hasDeck && hasModel);
 }
 
 function updateImageControls() {
     const hasDeck = Boolean(imageDeckSelect?.value);
     const hasImageModel = Boolean(imageModelSelect?.value);
-    const hasWorkers = Boolean(imageWorkerSelect?.value);
-    generateImagesButton.disabled = imageJobRunning || !(hasDeck && hasImageModel && hasWorkers);
+    generateImagesButton.disabled = imageJobRunning || !(hasDeck && hasImageModel);
 }
 
 function updateGalleryControls() {
@@ -444,15 +430,14 @@ syncButton.addEventListener("click", async () => {
 
 async function generateAudio() {
     const deck = audioDeckSelect.value;
-    const model = audioModelSelect.value;
-    const workers = audioWorkerSelect.value;
+    const model = (audioModelSelect && audioModelSelect.value) ? audioModelSelect.value : "gpt-4o-mini-tts";
+    const workers = 10;
     if (!deck || !model) {
-        setStatus(statusLogAudio, "Please select a deck and audio model.");
+        setStatus(statusLogAudio, "Please select a deck.");
         return;
     }
-    if (!workers) {
-        setStatus(statusLogAudio, "Please choose worker count.");
-        return;
+    if (mediaLogContainer) {
+        mediaLogContainer.classList.remove("is-hidden");
     }
 
     setStatus(statusLogAudio, `Starting audio job for "${deck}"...`);
@@ -464,7 +449,7 @@ async function generateAudio() {
         const response = await fetch("/api/jobs/audio", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ deck, model, workers: Number(workers) }),
+            body: JSON.stringify({ deck, model, workers }),
         });
         const data = await response.json();
         if (!data.ok) {
@@ -518,16 +503,14 @@ generateAudioButton.addEventListener("click", generateAudio);
 async function generateImages() {
     const deck = imageDeckSelect.value;
     const imageModel = imageModelSelect.value;
-    const skipGating = skipGatingToggle.checked;
-    const workers = imageWorkerSelect.value;
+    const workers = 3;
 
     if (!deck || !imageModel) {
         setStatus(statusLogImages, "Please select a deck and image model.");
         return;
     }
-    if (!workers) {
-        setStatus(statusLogImages, "Please choose worker count.");
-        return;
+    if (mediaLogContainer) {
+        mediaLogContainer.classList.remove("is-hidden");
     }
 
     setStatus(statusLogImages, `Starting image job for "${deck}"...`);
@@ -538,7 +521,7 @@ async function generateImages() {
     const payload = {
         deck,
         image_model: imageModel,
-        skip_gating: skipGating,
+        skip_gating: false,
         workers: Number(workers),
     };
 
@@ -597,34 +580,34 @@ async function generateImages() {
 
 generateImagesButton.addEventListener("click", generateImages);
 
-refreshDecksAudio.addEventListener("click", loadDecks);
-refreshDecksImages.addEventListener("click", loadDecks);
+if (refreshDecksAudio === refreshDecksImages) {
+    refreshDecksImages.addEventListener("click", loadDecks);
+} else {
+    refreshDecksAudio.addEventListener("click", loadDecks);
+    refreshDecksImages.addEventListener("click", loadDecks);
+}
 if (refreshDecksChat) {
     refreshDecksChat.addEventListener("click", loadDecks);
 }
 
 audioDeckSelect.addEventListener("change", updateAudioControls);
-audioModelSelect.addEventListener("change", updateAudioControls);
-audioWorkerSelect.addEventListener("change", updateAudioControls);
+if (audioModelSelect) {
+    audioModelSelect.addEventListener("change", updateAudioControls);
+}
 audioDeckSelect.addEventListener("change", updateAudioCoverage);
 
 imageDeckSelect.addEventListener("change", updateImageControls);
 imageModelSelect.addEventListener("change", updateImageControls);
-skipGatingToggle.addEventListener("change", updateImageControls);
-imageWorkerSelect.addEventListener("change", updateImageControls);
 imageDeckSelect.addEventListener("change", updateImageCoverage);
 imageDeckSelect.addEventListener("change", () => {
     updateGalleryControls();
     if (imageDeckSelect.value) {
         galleryPage = 1;
         loadGallery();
-        loadBrowser();
     } else if (galleryGrid) {
         galleryGrid.classList.add("empty");
         galleryGrid.innerHTML = "<p>No deck selected.</p>";
-        if (browserTableBody) {
-            browserTableBody.innerHTML = `<tr><td colspan="2" class="empty-row">No deck selected.</td></tr>`;
-        }
+        setStatus(statusLogSearch, "");
     }
 });
 
@@ -656,25 +639,10 @@ if (browserSearchTerm) {
                 clearTimeout(searchDebounceTimer);
                 searchDebounceTimer = null;
             }
-            searchDecks();
+            applyBrowserFilter();
         }
     });
 }
-if (browserSearchClear) {
-    browserSearchClear.addEventListener("click", () => {
-        if (browserSearchTerm) browserSearchTerm.value = "";
-        if (searchDebounceTimer) {
-            clearTimeout(searchDebounceTimer);
-            searchDebounceTimer = null;
-        }
-        searchRequestSeq += 1;
-        setStatus(statusLogSearch, "Enter a word to find matching cards.");
-        if (searchTableBody) {
-            searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">No search yet.</td></tr>`;
-        }
-    });
-}
-
 if (chatDeckSelect) {
     chatDeckSelect.addEventListener("change", () => {
         updateChatControls();
@@ -704,7 +672,7 @@ function renderGallery(items) {
     if (!galleryGrid) return;
     if (!items.length) {
         galleryGrid.classList.add("empty");
-        galleryGrid.innerHTML = "<p>No generated images found for this deck.</p>";
+        galleryGrid.innerHTML = "<p>No cards found for this deck/filter.</p>";
         return;
     }
     galleryGrid.classList.remove("empty");
@@ -712,11 +680,13 @@ function renderGallery(items) {
         .map((item) => {
             const frontText = item.front_text || "(No Front text)";
             const backText = item.back_text || "(No Back text)";
-            const imageSide = item.image_side ? `Image on ${item.image_side}` : "Image";
+            const visual = item.has_image && item.image_url
+                ? `<img src="${item.image_url}" alt="${frontText}" loading="lazy" />`
+                : `<div class="image-placeholder">No image</div>`;
             return `
             <div class="image-card" data-sound="${item.sound_filename || ""}">
-                <img src="${item.image_url}" alt="${frontText}" loading="lazy" />
-                <div class="caption">${imageSide}<br />Front: ${frontText}<br />Back: ${backText}</div>
+                ${visual}
+                <div class="caption">Front: ${frontText}<br />Back: ${backText}</div>
             </div>`;
         })
         .join("");
@@ -752,35 +722,34 @@ if (galleryGrid) {
 async function loadGallery() {
     const deck = imageDeckSelect?.value;
     if (!deck) {
-        setStatus(statusLogGallery, "Select a deck to view images.");
+        setStatus(statusLogGallery, "Select a deck to browse cards.");
         return;
     }
     updateGalleryControls();
-    setStatus(statusLogGallery, `Loading images for "${deck}"...`);
+    const term = (browserSearchTerm?.value || "").trim();
+    setStatus(statusLogGallery, `Loading cards for "${deck}"${term ? ` (filter: "${term}")` : ""}...`);
     try {
         const response = await fetch(
-            `/api/deck-images?deck=${encodeURIComponent(deck)}&page=${galleryPage}&page_size=${getGalleryPageSize()}`
+            `/api/deck-gallery?deck=${encodeURIComponent(deck)}&term=${encodeURIComponent(term)}&page=${galleryPage}&page_size=${getGalleryPageSize()}`
         );
         const data = await response.json();
         if (!response.ok || !data.ok) {
-            throw new Error(data.message || "Failed to fetch deck images.");
+            throw new Error(data.message || "Failed to fetch deck gallery.");
         }
         galleryTotal = data.total ?? 0;
-        renderGallery(data.images || []);
+        renderGallery(data.items || []);
         updateGalleryControls();
-        if ((data.images || []).length) {
-            setStatus(
-                statusLogGallery,
-                `Showing ${data.images.length} image(s) for "${deck}" (page ${data.page || galleryPage}).`
-            );
+        if ((data.items || []).length) {
+            setStatus(statusLogGallery, "");
+            setStatus(statusLogSearch, "");
         } else {
-            setStatus(statusLogGallery, `No generated images found for "${deck}".`);
+            setStatus(statusLogGallery, `No cards found for "${deck}"${term ? ` with "${term}"` : ""}.`);
         }
     } catch (error) {
-        setStatus(statusLogGallery, `❌ Failed to load images: ${error}`);
+        setStatus(statusLogGallery, `❌ Failed to load gallery: ${error}`);
         if (galleryGrid) {
             galleryGrid.classList.add("empty");
-            galleryGrid.innerHTML = "<p>Unable to load images.</p>";
+            galleryGrid.innerHTML = "<p>Unable to load gallery.</p>";
         }
     }
 }
@@ -789,134 +758,31 @@ function getGalleryPageSize() {
     return 12;
 }
 
-function renderBrowserTable(cards) {
-    if (!browserTableBody) return;
-    if (!cards.length) {
-        browserTableBody.innerHTML = `<tr><td colspan="2" class="empty-row">No cards found in this deck.</td></tr>`;
-        return;
-    }
-    browserTableBody.innerHTML = "";
-    cards.forEach((card) => {
-        const tr = document.createElement("tr");
-        ["front", "back"].forEach((key) => {
-            const td = document.createElement("td");
-            td.textContent = card[key] || "";
-            tr.appendChild(td);
-        });
-        browserTableBody.appendChild(tr);
-    });
-}
-
-async function loadBrowser() {
-    const deck = browserDeckSelect?.value;
-    if (!deck) {
-        setStatus(statusLogBrowser, "Select a deck to view its cards.");
-        return;
-    }
-    setStatus(statusLogBrowser, `Loading cards for "${deck}"...`);
-    try {
-        const response = await fetch(`/api/deck-cards?deck=${encodeURIComponent(deck)}`);
-        const data = await response.json();
-        if (!response.ok || !data.ok) {
-            throw new Error(data.message || "Failed to fetch deck cards.");
-        }
-        renderBrowserTable(data.cards || []);
-        if ((data.cards || []).length) {
-            setStatus(statusLogBrowser, `Showing ${data.cards.length} card(s) in "${deck}".`);
-        } else {
-            setStatus(statusLogBrowser, `No cards found in "${deck}".`);
-        }
-    } catch (error) {
-        setStatus(statusLogBrowser, `❌ Failed to load deck: ${error}`);
-        if (browserTableBody) {
-            browserTableBody.innerHTML = `<tr><td colspan="3" class="empty-row">Unable to load cards.</td></tr>`;
-        }
-    }
-}
-
-function renderSearchTable(results) {
-    if (!searchTableBody) return;
-    if (!results.length) {
-        searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">No matches found.</td></tr>`;
-        return;
-    }
-    searchTableBody.innerHTML = "";
-    results.forEach((result) => {
-        const tr = document.createElement("tr");
-        const cells = [result.deck, result.front, result.back, result.match || ""];
-        cells.forEach((value) => {
-            const td = document.createElement("td");
-            td.textContent = value || "";
-            tr.appendChild(td);
-        });
-        searchTableBody.appendChild(tr);
-    });
-}
-
-async function searchDecks() {
-    const term = browserSearchTerm?.value?.trim();
-    if (!term) {
-        setStatus(statusLogSearch, "Enter a word to search.");
-        if (searchTableBody) {
-            searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">No search yet.</td></tr>`;
-        }
-        return;
-    }
-    const requestId = ++searchRequestSeq;
-    setStatus(statusLogSearch, `Searching for "${term}"...`);
-    try {
-        const response = await fetch(`/api/deck-search?term=${encodeURIComponent(term)}`);
-        const data = await response.json();
-        if (requestId !== searchRequestSeq) {
-            return;
-        }
-        if (!response.ok || !data.ok) {
-            throw new Error(data.message || "Search failed.");
-        }
-        renderSearchTable(data.results || []);
-        if ((data.results || []).length) {
-            setStatus(statusLogSearch, `Found ${data.results.length} match(es) for "${term}".`);
-        } else {
-            setStatus(statusLogSearch, `No matches found for "${term}".`);
-        }
-    } catch (error) {
-        if (requestId !== searchRequestSeq) {
-            return;
-        }
-        setStatus(statusLogSearch, `❌ Search failed: ${error}`);
-        if (searchTableBody) {
-            searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Unable to load results.</td></tr>`;
-        }
-    }
+function applyBrowserFilter() {
+    galleryPage = 1;
+    loadGallery();
 }
 
 function queueSearch() {
     const term = browserSearchTerm?.value?.trim();
-    if (!term) {
-        if (searchDebounceTimer) {
-            clearTimeout(searchDebounceTimer);
-            searchDebounceTimer = null;
-        }
-        searchRequestSeq += 1;
-        setStatus(statusLogSearch, "Enter a word to find matching cards.");
-        if (searchTableBody) {
-            searchTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">No search yet.</td></tr>`;
-        }
-        return;
-    }
-    setStatus(statusLogSearch, `Searching for "${term}"...`);
     if (searchDebounceTimer) {
         clearTimeout(searchDebounceTimer);
     }
     searchDebounceTimer = setTimeout(() => {
         searchDebounceTimer = null;
-        searchDecks();
+        if (!term) {
+            applyBrowserFilter();
+            return;
+        }
+        applyBrowserFilter();
     }, SEARCH_DEBOUNCE_MS);
 }
 
 loadDecks();
 loadModels("text", textModelSelect, "gpt-4.1-mini", statusLogSync, updateSyncButton);
-loadModels("audio", audioModelSelect, "gpt-4o-mini-tts", statusLogAudio, updateAudioControls);
+if (audioModelSelect) {
+    loadModels("audio", audioModelSelect, "gpt-4o-mini-tts", statusLogAudio, updateAudioControls);
+}
 loadModels("image", imageModelSelect, "gpt-image-1", statusLogImages, updateImageControls);
 loadModels("text", chatModelSelect, "gpt-5.2", null, updateChatControls);
 
