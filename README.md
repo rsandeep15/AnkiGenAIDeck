@@ -11,6 +11,63 @@ All scripts talk to a local AnkiConnect instance at `http://127.0.0.1:8765` and 
 
 ---
 
+## Agent-First Wrapper CLI
+
+Use `scripts/agent_tools.py` as the canonical entrypoint for agents (Codex/Claude) before writing bespoke AnkiConnect calls.
+
+```bash
+.venv/bin/python scripts/agent_tools.py list
+```
+
+Supported workflows:
+
+- `sync`: PDF -> deck
+- `audio`: deck audio generation
+- `images`: deck image generation
+- `cards-import`: import explicit Front/Back pairs from JSON
+- `ui`: run Flask app
+
+Examples:
+
+```bash
+# PDF -> deck
+.venv/bin/python scripts/agent_tools.py sync \
+  --pdf /path/to/lesson.pdf \
+  --deck "AdvancedBeginner1::LessonX" \
+  --model gpt-4.1-mini \
+  --romanized
+
+# Audio
+.venv/bin/python scripts/agent_tools.py audio \
+  --deck "AdvancedBeginner1" \
+  --model gpt-4o-mini-tts \
+  --voice onyx \
+  --workers 10
+
+# Images
+.venv/bin/python scripts/agent_tools.py images \
+  --deck "AdvancedBeginner1::Emotions & States" \
+  --image-model gpt-image-1 \
+  --workers 3
+
+# Manual card import
+.venv/bin/python scripts/agent_tools.py cards-import \
+  --deck "AdvancedBeginner1::Lesson3::GeotGatayo_13_Phrases" \
+  --input /path/to/pairs.json \
+  --front-key Front \
+  --back-key Back \
+  --dry-run
+```
+
+`cards-import` accepts either:
+
+- a JSON array of objects, e.g. `[{"Front":"...","Back":"..."}]`
+- or a wrapped object, e.g. `{"cards":[{"front":"...","back":"..."}]}`
+
+Tool metadata is in `agent_tools.json`.
+
+---
+
 ## Setup
 
 ```bash

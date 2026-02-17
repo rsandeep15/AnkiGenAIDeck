@@ -25,6 +25,12 @@
       "backend_script": "AnkiDeckToImages.py"
     },
     {
+      "id": "import_cards_to_deck",
+      "description": "Import explicit Front/Back card pairs from JSON into an Anki deck.",
+      "invoke": "python scripts/agent_tools.py cards-import --deck <deck_name> --input <pairs.json> [--front-key Front --back-key Back] [--note-model Basic] [--dry-run]",
+      "backend_script": "utils/anki_connect.py"
+    },
+    {
       "id": "run_web_ui",
       "description": "Run the local Flask UI for sync/audio/images/gallery workflows.",
       "invoke": "python scripts/agent_tools.py ui --port 5000",

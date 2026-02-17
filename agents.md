@@ -71,6 +71,7 @@ Common calls:
 - **Sync a PDF**: `.venv/bin/python scripts/agent_tools.py sync --pdf path/to.pdf --deck "MyDeck" --model gpt-4.1-mini --romanized`
 - **Generate audio**: `.venv/bin/python scripts/agent_tools.py audio --deck "MyDeck" --model gpt-4o-mini-tts --voice onyx --workers 10`
 - **Generate images**: `.venv/bin/python scripts/agent_tools.py images --deck "MyDeck" --image-model gpt-image-1 --workers 3`
+- **Import manual card pairs**: `.venv/bin/python scripts/agent_tools.py cards-import --deck "MyDeck" --input pairs.json --front-key Front --back-key Back --dry-run`
 - **Run UI**: `.venv/bin/python scripts/agent_tools.py ui --port 5000`, then open http://127.0.0.1:5000/
 - **List decks (AnkiConnect)**: POST `{"action":"deckNames","params":{},"version":6}` to `http://127.0.0.1:8765`
 

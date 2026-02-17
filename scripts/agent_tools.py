@@ -13,6 +13,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,7 @@ def cmd_list(_: argparse.Namespace) -> int:
             {"id": "sync_pdf_to_deck"},
             {"id": "generate_audio_for_deck"},
             {"id": "generate_images_for_deck"},
+            {"id": "import_cards_to_deck"},
             {"id": "run_web_ui"},
         ],
     }
@@ -94,6 +96,149 @@ def cmd_ui(args: argparse.Namespace) -> int:
     return subprocess.run(cmd, cwd=ROOT).returncode
 
 
+def load_card_rows(input_path: Path) -> list[dict[str, Any]]:
+    content = input_path.read_text(encoding="utf-8")
+    payload = json.loads(content)
+    if isinstance(payload, list):
+        rows = payload
+    elif isinstance(payload, dict) and isinstance(payload.get("cards"), list):
+        rows = payload["cards"]
+    else:
+        raise ValueError(
+            "Input JSON must be a list of card objects or an object with a 'cards' list."
+        )
+
+    normalized_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if isinstance(row, dict):
+            normalized_rows.append(row)
+    return normalized_rows
+
+
+def _first_nonempty_value(row: dict[str, Any], keys: list[str]) -> str:
+    for key in keys:
+        value = row.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def normalize_cards(
+    rows: list[dict[str, Any]], front_key: str, back_key: str
+) -> list[tuple[str, str]]:
+    cards: list[tuple[str, str]] = []
+    for row in rows:
+        front = _first_nonempty_value(
+            row,
+            [
+                front_key,
+                front_key.lower(),
+                front_key.capitalize(),
+                "Front",
+                "front",
+                "foreign",
+                "korean",
+            ],
+        )
+        back = _first_nonempty_value(
+            row,
+            [
+                back_key,
+                back_key.lower(),
+                back_key.capitalize(),
+                "Back",
+                "back",
+                "english",
+                "meaning",
+            ],
+        )
+        if front and back:
+            cards.append((front, back))
+    return cards
+
+
+def cmd_cards_import(args: argparse.Namespace) -> int:
+    input_path = Path(args.input)
+    if not input_path.exists():
+        print(f"Input file not found: {input_path}")
+        return 1
+
+    try:
+        rows = load_card_rows(input_path)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"Failed to load cards from {input_path}: {exc}")
+        return 1
+
+    pairs = normalize_cards(rows, args.front_key, args.back_key)
+    if not pairs:
+        print(
+            "No valid cards found. Ensure rows contain front/back values "
+            f"for keys '{args.front_key}' and '{args.back_key}'."
+        )
+        return 1
+
+    deduped_pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for pair in pairs:
+        if not args.allow_duplicates and pair in seen:
+            continue
+        deduped_pairs.append(pair)
+        seen.add(pair)
+
+    if args.dry_run:
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "dry_run": True,
+                    "deck": args.deck,
+                    "input_rows": len(rows),
+                    "valid_pairs": len(pairs),
+                    "to_add": len(deduped_pairs),
+                    "sample": [
+                        {"Front": f, "Back": b} for f, b in deduped_pairs[:5]
+                    ],
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from utils.anki_connect import invoke
+
+    invoke("createDeck", deck=args.deck)
+    notes = [
+        {
+            "deckName": args.deck,
+            "modelName": args.note_model,
+            "fields": {"Front": front, "Back": back},
+        }
+        for front, back in deduped_pairs
+    ]
+    result = invoke("addNotes", notes=notes) or []
+    added = len([note_id for note_id in result if note_id])
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "dry_run": False,
+                "deck": args.deck,
+                "input_rows": len(rows),
+                "valid_pairs": len(pairs),
+                "attempted_add": len(deduped_pairs),
+                "added": added,
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Agent-first wrapper for canonical Anki toolkit flows."
@@ -135,6 +280,40 @@ def build_parser() -> argparse.ArgumentParser:
     s_ui = sub.add_parser("ui", help="Run Flask UI.")
     s_ui.add_argument("--port", type=int, default=5000)
     s_ui.set_defaults(func=cmd_ui)
+
+    s_cards = sub.add_parser(
+        "cards-import",
+        help="Import explicit Front/Back card pairs from JSON into a deck.",
+    )
+    s_cards.add_argument("--deck", required=True, help="Target deck name.")
+    s_cards.add_argument(
+        "--input",
+        required=True,
+        type=Path,
+        help="Path to JSON file (list of objects or {'cards': [...]}).",
+    )
+    s_cards.add_argument(
+        "--front-key",
+        default="Front",
+        help="Source key for front text in each row (default: Front).",
+    )
+    s_cards.add_argument(
+        "--back-key",
+        default="Back",
+        help="Source key for back text in each row (default: Back).",
+    )
+    s_cards.add_argument(
+        "--note-model",
+        default="Basic",
+        help="Anki note model to use (default: Basic).",
+    )
+    s_cards.add_argument(
+        "--allow-duplicates",
+        action="store_true",
+        help="Do not deduplicate identical Front/Back pairs within this import.",
+    )
+    s_cards.add_argument("--dry-run", action="store_true")
+    s_cards.set_defaults(func=cmd_cards_import)
 
     return parser
 
