@@ -251,8 +251,8 @@ def main():
     }
     print(f"SUMMARY: {json.dumps(summary, ensure_ascii=False)}")
     try:
-        pdf_archive_dir = Path.cwd() / "pdfs"
-        pdf_archive_dir.mkdir(exist_ok=True)
+        pdf_archive_dir = Path.cwd() / ".local_memory" / "pdfs"
+        pdf_archive_dir.mkdir(parents=True, exist_ok=True)
         destination = pdf_archive_dir / args.pdf.name
         if destination.exists():
             print(f"PDF already exists at {destination}; skipping move.")

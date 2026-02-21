@@ -28,7 +28,7 @@ This repo already wraps OpenAI + AnkiConnect; this page gives a fast “agent-fi
 ## File/Dir Map
 - Uploads: `uploads/`
 - Media: `media/audio`, `media/images`
-- Archived PDFs: `pdfs/`
+- Archived PDFs: `.local_memory/pdfs/`
 - Flask static/templates: `static/`, `templates/`
 
 ## Concurrency & Rate Limits

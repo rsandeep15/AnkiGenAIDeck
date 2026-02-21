@@ -99,7 +99,7 @@ export OPENAI_API_KEY=YOUR_KEY_HERE
 export FLASK_APP=app.py
 ```
 
-Make sure Anki is running with the AnkiConnect add-on enabled. Generated media files are stored under `media/audio`, `media/images`, and processed PDFs are archived to `pdfs/`.
+Make sure Anki is running with the AnkiConnect add-on enabled. Generated media files are stored under `media/audio`, `media/images`, and processed PDFs are archived to `.local_memory/pdfs/`.
 
 ### Pre-commit (optional)
 
@@ -145,7 +145,7 @@ The **Deck Browser** tab shows word pairs in a scrollable table.
 - uploads a PDF to OpenAI
 - extracts vocabulary pairs (`english`, `foreign`, optional `romanized`)
 - creates / populates the target deck via AnkiConnect
-- archives the original PDF to `pdfs/`
+- archives the original PDF to `.local_memory/pdfs/`
 
 **Usage**
 
