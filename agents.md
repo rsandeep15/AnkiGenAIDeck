@@ -72,6 +72,9 @@ Common calls:
 - **Generate audio**: `.venv/bin/python scripts/agent_tools.py audio --deck "MyDeck" --model gpt-4o-mini-tts --voice onyx --workers 10`
 - **Generate images**: `.venv/bin/python scripts/agent_tools.py images --deck "MyDeck" --image-model gpt-image-1 --workers 3`
 - **Import manual card pairs**: `.venv/bin/python scripts/agent_tools.py cards-import --deck "MyDeck" --input pairs.json --front-key Front --back-key Back --dry-run`
+- **Evaluate image gating**: `.venv/bin/python scripts/agent_tools.py gating eval --dataset tmp/gating_labels.jsonl --mode prompt-ref --out-csv tmp/gating_outputs.csv`
+- **Hillclimb image gating**: `.venv/bin/python scripts/agent_tools.py gating hillclimb --dataset tmp/gating_labels.jsonl --seed-prompt prompts/image_gating_seed_prompt.txt --rounds 2 --branching 4 --keep-top 2`
+- **Upload gating dataset**: `.venv/bin/python scripts/agent_tools.py gating upload-dataset --dataset tmp/gating_labels.jsonl`
 - **Run UI**: `.venv/bin/python scripts/agent_tools.py ui --port 5000`, then open http://127.0.0.1:5000/
 - **List decks (AnkiConnect)**: POST `{"action":"deckNames","params":{},"version":6}` to `http://127.0.0.1:8765`
 

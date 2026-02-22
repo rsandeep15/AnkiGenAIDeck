@@ -32,3 +32,4 @@ scripts/chat_eval.py
 scripts/prompts_korean.txt
 scripts/*
 !scripts/agent_tools.py
+!scripts/image_gating_eval.py

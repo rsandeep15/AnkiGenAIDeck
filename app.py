@@ -876,16 +876,9 @@ def deck_image_stats():
 
     try:
         total_notes = invoke("findNotes", query=f'deck:"{deck}"') or []
-        image_notes = set(
-            invoke("findNotes", query=f'deck:"{deck}" "image:"') or []
-        )
-        if not image_notes:
-            image_notes.update(
-                invoke("findNotes", query=f'deck:"{deck}" front:*<img*') or []
-            )
-            image_notes.update(
-                invoke("findNotes", query=f'deck:"{deck}" back:*<img*') or []
-            )
+        image_notes = set(invoke("findNotes", query=f'deck:"{deck}" "image:"') or [])
+        image_notes.update(invoke("findNotes", query=f'deck:"{deck}" front:*<img*') or [])
+        image_notes.update(invoke("findNotes", query=f'deck:"{deck}" back:*<img*') or [])
         total = len(total_notes)
         with_images = len(image_notes)
         return jsonify(

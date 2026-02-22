@@ -40,9 +40,18 @@ class TestAnkiDeckToImages(unittest.TestCase):
         self.assertNotIn("<img", result.lower())
         self.assertEqual(result.strip(), "<div>front</div><p></p>")
 
+    def test_has_image_tag_detects_img_elements(self) -> None:
+        self.assertTrue(images.has_image_tag('<img src="x.png">'))
+        self.assertTrue(images.has_image_tag("<div><IMG SRC='x.png'></div>"))
+        self.assertFalse(images.has_image_tag("<div>no image</div>"))
+
     def test_sanitize_text_strips_html_and_collapses_space(self) -> None:
         raw = "<div>Hello&nbsp;&nbsp;world</div><br>!"
         self.assertEqual(images.sanitize_text(raw), "Hello world !")
+
+    def test_sanitize_text_strips_sound_tags(self) -> None:
+        raw = "한국어[sound:clip.mp3] <div>단어</div>"
+        self.assertEqual(images.sanitize_text(raw), "한국어 단어")
 
     def test_build_image_prompt_inserts_text(self) -> None:
         template = "Draw: {text}"
@@ -50,7 +59,7 @@ class TestAnkiDeckToImages(unittest.TestCase):
 
     @patch("AnkiDeckToImages.invoke")
     @patch("AnkiDeckToImages.OpenAI")
-    def test_process_card_removes_existing_image_when_gating_false(
+    def test_process_card_skips_when_image_already_exists(
         self, mock_openai: MagicMock, mock_invoke: MagicMock
     ) -> None:
         mock_client = MagicMock()
@@ -70,12 +79,8 @@ class TestAnkiDeckToImages(unittest.TestCase):
         )
 
         self.assertEqual(status, "skip")
-        self.assertEqual(reason, "Gating model returned false; existing image removed.")
-        mock_invoke.assert_called_once()
-        (args, kwargs) = mock_invoke.call_args
-        self.assertEqual(args[0], "updateNoteFields")
-        updated_fields = kwargs["note"]["fields"]
-        self.assertNotIn("<img", updated_fields["Front"].lower())
+        self.assertEqual(reason, "Card already has an image.")
+        mock_invoke.assert_not_called()
 
     @patch("AnkiDeckToImages.generate_image", return_value=Path("fake.png"))
     @patch("AnkiDeckToImages.invoke")

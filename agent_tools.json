@@ -31,6 +31,24 @@
       "backend_script": "utils/anki_connect.py"
     },
     {
+      "id": "evaluate_image_gating",
+      "description": "Evaluate image gating decisions against labeled ground truth and write front/back/output CSV.",
+      "invoke": "python scripts/agent_tools.py gating eval --dataset <ground_truth.jsonl> --mode prompt-ref --out-csv tmp/image_gating_eval_outputs.csv",
+      "backend_script": "scripts/image_gating_eval.py"
+    },
+    {
+      "id": "hillclimb_image_gating",
+      "description": "Iteratively propose and evaluate improved gating prompts against labeled data.",
+      "invoke": "python scripts/agent_tools.py gating hillclimb --dataset <ground_truth.jsonl> --seed-prompt <seed_prompt.txt> --rounds 2 --branching 4 --keep-top 2",
+      "backend_script": "scripts/image_gating_eval.py"
+    },
+    {
+      "id": "upload_image_gating_dataset",
+      "description": "Upload a labeled gating dataset to OpenAI Files for tracking/reuse.",
+      "invoke": "python scripts/agent_tools.py gating upload-dataset --dataset <ground_truth.jsonl>",
+      "backend_script": "scripts/image_gating_eval.py"
+    },
+    {
       "id": "list_local_reference_pdfs",
       "description": "List local-only reference PDFs kept outside git tracking.",
       "invoke": "python scripts/agent_tools.py docs-list",

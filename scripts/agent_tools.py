@@ -38,6 +38,9 @@ def cmd_list(_: argparse.Namespace) -> int:
             {"id": "generate_audio_for_deck"},
             {"id": "generate_images_for_deck"},
             {"id": "import_cards_to_deck"},
+            {"id": "evaluate_image_gating"},
+            {"id": "hillclimb_image_gating"},
+            {"id": "upload_image_gating_dataset"},
             {"id": "list_local_reference_pdfs"},
             {"id": "read_local_reference_pdf"},
             {"id": "run_web_ui"},
@@ -96,6 +99,11 @@ def cmd_images(args: argparse.Namespace) -> int:
 def cmd_ui(args: argparse.Namespace) -> int:
     port = str(args.port)
     cmd = [sys.executable, "-m", "flask", "--app", "app.py", "run", "--port", port]
+    return subprocess.run(cmd, cwd=ROOT).returncode
+
+
+def cmd_gating(args: argparse.Namespace) -> int:
+    cmd = [sys.executable, str(ROOT / "scripts" / "image_gating_eval.py"), *args.gating_args]
     return subprocess.run(cmd, cwd=ROOT).returncode
 
 
@@ -372,6 +380,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional docs directory override (default: .local_memory/pdfs).",
     )
     s_docs_read.set_defaults(func=cmd_docs_read)
+
+    s_gating = sub.add_parser(
+        "gating",
+        help="Run image gating tools (make-template/eval/hillclimb/upload-dataset).",
+    )
+    s_gating.add_argument("gating_args", nargs=argparse.REMAINDER)
+    s_gating.set_defaults(func=cmd_gating)
 
     s_cards = sub.add_parser(
         "cards-import",

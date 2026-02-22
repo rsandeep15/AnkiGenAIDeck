@@ -503,7 +503,7 @@ generateAudioButton.addEventListener("click", generateAudio);
 async function generateImages() {
     const deck = imageDeckSelect.value;
     const imageModel = imageModelSelect.value;
-    const workers = 3;
+    const workers = 15;
 
     if (!deck || !imageModel) {
         setStatus(statusLogImages, "Please select a deck and image model.");

@@ -23,6 +23,7 @@ from utils.common import (
     HTML_TAG_RE,
     IMG_TAG_RE,
     NBSP_RE,
+    SOUND_TAG_RE,
 )
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -145,13 +146,18 @@ def select_candidates(
 def sanitize_text(text: str) -> str:
     """Strip HTML tags and collapse whitespace for cleaner prompts."""
     without_nbsp = NBSP_RE.sub(" ", text)
-    without_tags = HTML_TAG_RE.sub(" ", without_nbsp)
+    without_sound = SOUND_TAG_RE.sub(" ", without_nbsp)
+    without_tags = HTML_TAG_RE.sub(" ", without_sound)
     return " ".join(without_tags.split())
 
 
 def strip_image_tags(text: str) -> str:
     """Remove any <img> tags so we can replace or delete them cleanly."""
     return IMG_TAG_RE.sub("", text)
+
+
+def has_image_tag(text: str) -> bool:
+    return bool(IMG_TAG_RE.search(text or ""))
 
 
 def build_image_prompt(template: str, concept: str) -> str:
@@ -258,6 +264,8 @@ def process_card(
 ) -> Tuple[str, str, Any]:
     card_id, front_text, back_text = card
     local_client = OpenAI(api_key=api_key)
+    if has_image_tag(front_text) or has_image_tag(back_text):
+        return ("skip", sanitize_text(back_text), "Card already has an image.")
     front_without_images = strip_image_tags(front_text)
     back_without_images = strip_image_tags(back_text)
     cleaned_back = sanitize_text(back_without_images)
@@ -356,6 +364,10 @@ def main() -> None:
         f"Generating images with up to {max_workers} worker(s) using image model {args.image_model} "
         f"and {'skipping' if args.skip_gating else 'using prompt-configured'} gating."
     )
+    if not args.skip_gating:
+        print(
+            f"Gating prompt reference: id={GATING_PROMPT_ID} version={GATING_PROMPT_VERSION}"
+        )
 
     added = skipped = failed = dry_run_count = 0
     total = len(candidates)

@@ -178,6 +178,23 @@ class TestDeckChatContext(unittest.TestCase):
         data = response.get_json()
         self.assertFalse(data["ok"])
 
+    @patch("app.invoke")
+    def test_deck_image_stats_unions_image_and_img_tag_queries(self, mock_invoke) -> None:
+        mock_invoke.side_effect = [
+            [1, 2, 3, 4],  # total notes in deck
+            [1],           # image: query
+            [2],           # front:*<img*
+            [3],           # back:*<img*
+        ]
+        client = app.app.test_client()
+        response = client.get("/api/deck-image-stats?deck=TestDeck")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["total"], 4)
+        self.assertEqual(data["with_images"], 3)
+        self.assertEqual(data["coverage"], 75.0)
+
     def test_media_endpoint_requires_filename(self) -> None:
         client = app.app.test_client()
         response = client.get("/api/media")

@@ -25,6 +25,7 @@ Supported workflows:
 - `audio`: deck audio generation
 - `images`: deck image generation
 - `cards-import`: import explicit Front/Back pairs from JSON
+- `gating`: image-gating dataset tools (template/eval/hillclimb/upload-dataset)
 - `docs-list`: list local memory PDFs
 - `docs-read`: read a specific page from a local memory PDF
 - `ui`: run Flask app
@@ -63,6 +64,11 @@ Examples:
 # Local memory docs (agent-readable)
 .venv/bin/python scripts/agent_tools.py docs-list
 .venv/bin/python scripts/agent_tools.py docs-read --file Toy_Korean_Verbs_Table.pdf --page 1
+
+# Image gating: create dataset template, evaluate, hillclimb
+.venv/bin/python scripts/agent_tools.py gating make-template --out tmp/gating_labels.jsonl
+.venv/bin/python scripts/agent_tools.py gating eval --dataset tmp/gating_labels.jsonl --mode prompt-ref --out-csv tmp/gating_outputs.csv
+.venv/bin/python scripts/agent_tools.py gating hillclimb --dataset tmp/gating_labels.jsonl --seed-prompt prompts/image_gating_seed_prompt.txt --rounds 2 --branching 4 --keep-top 2
 ```
 
 `cards-import` accepts either:
@@ -71,6 +77,20 @@ Examples:
 - or a wrapped object, e.g. `{"cards":[{"front":"...","back":"..."}]}`
 
 Tool metadata is in `agent_tools.json`.
+
+### Image gating judge + hillclimb
+
+- Dataset format supports `.jsonl`, `.json`, or `.csv`.
+- Expected keys per row:
+  - `front` (or `Front`, `foreign`, `korean`)
+  - `back` (or `Back`, `english`, `meaning`)
+  - label key: `label` (or `should_generate`, `generate_image`, `target`) as true/false
+- `eval` writes a CSV with columns:
+  - `front,back,output`
+  - where `output` is judge decision (`true`/`false`)
+- `hillclimb` writes:
+  - `tmp/image_gating_hillclimb/best_prompt.txt`
+  - `tmp/image_gating_hillclimb/leaderboard.jsonl`
 
 ### Local memory docs
 
