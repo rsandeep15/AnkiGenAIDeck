@@ -899,10 +899,7 @@ if (studyEnableSoundButton) {
         if (!studyFilteredCards.length) return;
         const card = studyFilteredCards[studyIndex];
         if (!card?.sound_filename) return;
-        await unlockStudyAudio();
-        if (studyAudioUnlocked) {
-            playAudioFilename(card.sound_filename);
-        }
+        await playAudioFilename(card.sound_filename);
     });
 }
 if (studyFullscreenButton) {
@@ -963,7 +960,7 @@ function renderGallery(items) {
 }
 
 async function playAudioFilename(filename) {
-    if (!filename || !studyAudioUnlocked) return;
+    if (!filename) return;
     try {
         if (!currentPlayingAudio) {
             currentPlayingAudio = new Audio();
@@ -972,6 +969,8 @@ async function playAudioFilename(filename) {
         const audio = currentPlayingAudio;
         audio.pause();
         audio.currentTime = 0;
+        audio.muted = false;
+        audio.volume = 1.0;
         audio.src = `/api/media?filename=${encodeURIComponent(filename)}`;
         await audio.play();
     } catch (error) {
