@@ -156,6 +156,31 @@ Answers stream live in a chat-style view (Enter to send, Shift+Enter for newline
 The **Deck Images** tab now includes the image gallery with pagination and per-deck image coverage.
 The **Deck Browser** tab shows word pairs in a scrollable table.
 
+### Read paths from Anki SQLite (optional)
+
+The Flask app supports read-only deck browsing/search directly from your local Anki collection SQLite DB.
+Writes (sync/audio/image generation and note updates) still go through AnkiConnect.
+
+- Collection path default (macOS): `~/Library/Application Support/Anki2/User 1/collection.anki2`
+- Override path with env var: `ANKI_COLLECTION_PATH=/full/path/to/collection.anki2`
+- Override media path with env var: `ANKI_MEDIA_PATH=/full/path/to/collection.media`
+
+Supported API endpoints accept `source=sqlite` (or `source=anki`):
+
+- `/api/decks`
+- `/api/deck-gallery`
+- `/api/deck-cards`
+- `/api/deck-search`
+
+Example:
+
+```bash
+curl "http://127.0.0.1:5001/api/deck-cards?deck=AdvancedBeginner1&source=sqlite"
+```
+
+Media serving endpoint `/api/media?filename=...` now supports local filesystem fallback
+(`ANKI_MEDIA_PATH`, plus repo `media/audio` and `media/images`) before AnkiConnect.
+
 ---
 
 ## AnkiSync — Build Decks From PDFs

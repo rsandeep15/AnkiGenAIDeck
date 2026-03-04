@@ -1,5 +1,6 @@
 import base64
 import json
+import mimetypes
 import os
 import queue
 import re
@@ -54,6 +55,7 @@ PROGRESS_RE = re.compile(r"^PROGRESS\s+(\d+)\s*/\s*(\d+)\s*$")
 SUMMARY_RE = re.compile(r"^SUMMARY:\s*(\{.*\})\s*$")
 TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 SEARCH_TERM_RE = re.compile(r"[\n\r\t]+")
+ANKI_US_RE = "\x1f"
 
 
 @dataclass
@@ -276,6 +278,139 @@ def run_script(script_path: Path, args: List[str]):
     )
 
 
+def anki_collection_path() -> Path:
+    override = os.environ.get("ANKI_COLLECTION_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / "Library" / "Application Support" / "Anki2" / "User 1" / "collection.anki2"
+
+
+def anki_media_path() -> Path:
+    override = os.environ.get("ANKI_MEDIA_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
+    collection = anki_collection_path()
+    return collection.parent / "collection.media"
+
+
+def media_search_dirs() -> List[Path]:
+    dirs: List[Path] = []
+    for path in [MEDIA_DIR / "audio", MEDIA_DIR / "images", IMAGE_DIR, anki_media_path()]:
+        if path not in dirs:
+            dirs.append(path)
+    return dirs
+
+
+def resolve_local_media_file(filename: str) -> Optional[Path]:
+    safe_name = Path(filename or "").name
+    if not safe_name:
+        return None
+    for media_dir in media_search_dirs():
+        candidate = media_dir / safe_name
+        if candidate.exists():
+            return candidate
+    # Fallback: try de-hashed image basename variant.
+    stem, suffix = os.path.splitext(safe_name)
+    if "-" in stem:
+        base_name = stem.split("-", 1)[0] + suffix
+        for media_dir in media_search_dirs():
+            candidate = media_dir / base_name
+            if candidate.exists():
+                return candidate
+    return None
+
+
+def sqlite_available() -> bool:
+    return anki_collection_path().exists()
+
+
+def sqlite_connect_ro() -> sqlite3.Connection:
+    path = anki_collection_path()
+    if not path.exists():
+        raise FileNotFoundError(f"Anki SQLite collection not found at {path}")
+    uri = f"file:{path.as_posix()}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
+    def _unicase(a: str, b: str) -> int:
+        left = (a or "").casefold()
+        right = (b or "").casefold()
+        if left < right:
+            return -1
+        if left > right:
+            return 1
+        return 0
+    conn.create_collation("unicase", _unicase)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def normalize_deck_name(name: str) -> str:
+    return (name or "").replace(ANKI_US_RE, "::")
+
+
+def extract_note_fields_from_flds(flds: str) -> Tuple[str, str, str]:
+    parts = (flds or "").split(ANKI_US_RE)
+    front = parts[0] if len(parts) > 0 else ""
+    back = parts[1] if len(parts) > 1 else ""
+    romanized = parts[2] if len(parts) > 2 else ""
+    return front, back, romanized
+
+
+def sqlite_media_payload(front_raw: str, back_raw: str) -> dict:
+    front_image = extract_image_filename(front_raw)
+    back_image = extract_image_filename(back_raw)
+    filename = front_image or back_image
+    image_url = ""
+    if filename:
+        local_path = resolve_local_media_file(filename)
+        if local_path and local_path.exists():
+            image_url = url_for("media_file", filename=local_path.name)
+    return {
+        "has_image": bool(image_url),
+        "image_url": image_url,
+        "image_side": "Front" if front_image else ("Back" if back_image else ""),
+        "sound_filename": extract_sound_filename(front_raw) or extract_sound_filename(back_raw),
+    }
+
+
+def sqlite_fetch_note_rows(deck: str) -> List[sqlite3.Row]:
+    with sqlite_connect_ro() as conn:
+        cursor = conn.execute(
+            """
+            SELECT
+              n.id AS note_id,
+              MIN(c.id) AS card_id,
+              d.name AS deck_name,
+              n.flds AS flds
+            FROM notes n
+            JOIN cards c ON c.nid = n.id
+            JOIN decks d ON d.id = c.did
+            WHERE (
+              REPLACE(d.name, char(31), '::') = ?
+              OR REPLACE(d.name, char(31), '::') LIKE ?
+            )
+            GROUP BY n.id, d.name, n.flds
+            ORDER BY n.id
+            """,
+            (deck, f"{deck}::%"),
+        )
+        return cursor.fetchall()
+
+
+def sqlite_request_mode() -> str:
+    mode = (request.args.get("source", "") or "").strip().lower()
+    if mode in {"sqlite", "anki"}:
+        return mode
+    return "auto"
+
+
+def should_use_sqlite(mode: str) -> bool:
+    if mode == "anki":
+        return False
+    if mode == "sqlite":
+        return sqlite_available()
+    return sqlite_available()
+
+
 @app.route("/", methods=["GET"])
 def index():
     return render_template("index.html")
@@ -283,10 +418,23 @@ def index():
 
 @app.route("/api/decks", methods=["GET"])
 def list_decks():
+    mode = sqlite_request_mode()
     try:
+        if should_use_sqlite(mode):
+            with sqlite_connect_ro() as conn:
+                rows = conn.execute("SELECT name FROM decks ORDER BY name").fetchall()
+            decks = sorted(normalize_deck_name(row["name"]) for row in rows)
+            return jsonify({"ok": True, "decks": decks, "source": "sqlite"})
         decks = invoke("deckNames")
-        return jsonify({"ok": True, "decks": decks})
+        return jsonify({"ok": True, "decks": decks, "source": "anki"})
     except Exception as exc:
+        if mode == "sqlite":
+            return jsonify({"ok": False, "message": str(exc)}), 500
+        try:
+            decks = invoke("deckNames")
+            return jsonify({"ok": True, "decks": decks, "source": "anki"})
+        except Exception:
+            pass
         return jsonify({"ok": False, "message": str(exc)}), 500
 
 
@@ -498,6 +646,7 @@ def deck_images():
 def deck_gallery():
     deck = request.args.get("deck", "").strip()
     term = normalize_search_term(request.args.get("term", ""))
+    mode = sqlite_request_mode()
     if not deck:
         return jsonify({"ok": False, "message": "Deck parameter is required."}), 400
     try:
@@ -509,6 +658,41 @@ def deck_gallery():
         return jsonify({"ok": False, "message": "Invalid page or page_size."}), 400
 
     try:
+        if should_use_sqlite(mode):
+            rows = sqlite_fetch_note_rows(deck)
+            results = []
+            term_lower = term.lower()
+            for row in rows:
+                front_raw, back_raw, _ = extract_note_fields_from_flds(row["flds"] or "")
+                front_text = clean_field_text(front_raw)
+                back_text = clean_field_text(back_raw)
+                if term_lower and term_lower not in front_text.lower() and term_lower not in back_text.lower():
+                    continue
+                media = sqlite_media_payload(front_raw, back_raw)
+                results.append(
+                    {
+                        "id": int(row["note_id"]),
+                        "front_text": front_text,
+                        "back_text": back_text,
+                        **media,
+                    }
+                )
+
+            total = len(results)
+            start = (page - 1) * page_size
+            end = start + page_size
+            return jsonify(
+                {
+                    "ok": True,
+                    "items": results[start:end],
+                    "page": page,
+                    "page_size": page_size,
+                    "total": total,
+                    "term": term,
+                    "source": "sqlite",
+                }
+            )
+
         query = f'deck:"{deck}"'
         if term:
             query = (
@@ -577,22 +761,81 @@ def deck_gallery():
                 "page_size": page_size,
                 "total": total,
                 "term": term,
+                "source": "anki",
             }
         )
     except Exception as exc:
+        if mode != "sqlite":
+            try:
+                query = f'deck:"{deck}"'
+                if term:
+                    query = (
+                        f'deck:"{deck}" '
+                        f'({build_field_query("Front", term)} OR {build_field_query("Back", term)})'
+                    )
+                note_ids = invoke("findNotes", query=query) or []
+                notes = invoke("notesInfo", notes=note_ids) if note_ids else []
+                results = []
+                for note_id, note in zip(note_ids, notes):
+                    fields = note.get("fields", {})
+                    front_raw = (fields.get("Front") or {}).get("value", "")
+                    back_raw = (fields.get("Back") or {}).get("value", "")
+                    media = sqlite_media_payload(front_raw, back_raw)
+                    results.append(
+                        {
+                            "id": note_id,
+                            "front_text": clean_field_text(front_raw),
+                            "back_text": clean_field_text(back_raw),
+                            **media,
+                        }
+                    )
+                total = len(results)
+                start = (page - 1) * page_size
+                end = start + page_size
+                return jsonify(
+                    {
+                        "ok": True,
+                        "items": results[start:end],
+                        "page": page,
+                        "page_size": page_size,
+                        "total": total,
+                        "term": term,
+                        "source": "anki",
+                    }
+                )
+            except Exception:
+                pass
         return jsonify({"ok": False, "message": str(exc)}), 500
 
 
 @app.route("/api/deck-cards", methods=["GET"])
 def deck_cards():
     deck = request.args.get("deck", "").strip()
+    mode = sqlite_request_mode()
     if not deck:
         return jsonify({"ok": False, "message": "Deck parameter is required."}), 400
 
     try:
+        if should_use_sqlite(mode):
+            rows = sqlite_fetch_note_rows(deck)
+            cards = []
+            for row in rows:
+                front_raw, back_raw, romanized_raw = extract_note_fields_from_flds(row["flds"] or "")
+                media = sqlite_media_payload(front_raw, back_raw)
+                cards.append(
+                    {
+                        "id": int(row["note_id"]),
+                        "front": clean_field_text(front_raw),
+                        "back": clean_field_text(back_raw),
+                        "romanized": clean_field_text(romanized_raw),
+                        **media,
+                    }
+                )
+            return jsonify({"ok": True, "cards": cards, "source": "sqlite"})
+
         note_ids = invoke("findNotes", query=f'deck:"{deck}"')
         if not note_ids:
-            return jsonify({"ok": True, "cards": []})
+            return jsonify({"ok": True, "cards": [], "source": "anki"})
         notes = invoke("notesInfo", notes=note_ids)
         cards = []
         for note_id, note in zip(note_ids, notes):
@@ -633,8 +876,31 @@ def deck_cards():
                     "sound_filename": extract_sound_filename(front_raw) or extract_sound_filename(back_raw),
                 }
             )
-        return jsonify({"ok": True, "cards": cards})
+        return jsonify({"ok": True, "cards": cards, "source": "anki"})
     except Exception as exc:
+        if mode != "sqlite":
+            try:
+                note_ids = invoke("findNotes", query=f'deck:"{deck}"')
+                notes = invoke("notesInfo", notes=note_ids) if note_ids else []
+                cards = []
+                for note_id, note in zip(note_ids, notes):
+                    fields = note.get("fields", {})
+                    front_raw = (fields.get("Front") or {}).get("value", "")
+                    back_raw = (fields.get("Back") or {}).get("value", "")
+                    romanized_raw = (fields.get("Romanized") or {}).get("value", "")
+                    media = sqlite_media_payload(front_raw, back_raw)
+                    cards.append(
+                        {
+                            "id": note_id,
+                            "front": clean_field_text(front_raw),
+                            "back": clean_field_text(back_raw),
+                            "romanized": clean_field_text(romanized_raw),
+                            **media,
+                        }
+                    )
+                return jsonify({"ok": True, "cards": cards, "source": "anki"})
+            except Exception:
+                pass
         return jsonify({"ok": False, "message": str(exc)}), 500
 
 
@@ -651,12 +917,60 @@ def deck_search():
     except (TypeError, ValueError):
         limit = 50
     limit = max(1, min(200, limit))
+    mode = sqlite_request_mode()
 
     try:
+        if should_use_sqlite(mode):
+            with sqlite_connect_ro() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT
+                      n.id AS note_id,
+                      d.name AS deck_name,
+                      n.flds AS flds
+                    FROM notes n
+                    JOIN cards c ON c.nid = n.id
+                    JOIN decks d ON d.id = c.did
+                    GROUP BY n.id, d.name, n.flds
+                    ORDER BY n.id DESC
+                    """
+                ).fetchall()
+
+            results = []
+            term_lower = term.lower()
+            for row in rows:
+                front_raw, back_raw, romanized_raw = extract_note_fields_from_flds(row["flds"] or "")
+                front = clean_field_text(front_raw)
+                back = clean_field_text(back_raw)
+                romanized = clean_field_text(romanized_raw)
+                in_front = term_lower in front.lower()
+                in_back = term_lower in back.lower()
+                if not in_front and not in_back:
+                    continue
+                if in_front and in_back:
+                    match = "both"
+                elif in_front:
+                    match = "front"
+                else:
+                    match = "back"
+                results.append(
+                    {
+                        "id": int(row["note_id"]),
+                        "deck": normalize_deck_name(row["deck_name"]),
+                        "front": front,
+                        "back": back,
+                        "romanized": romanized,
+                        "match": match,
+                    }
+                )
+                if len(results) >= limit:
+                    break
+            return jsonify({"ok": True, "results": results, "source": "sqlite"})
+
         query = f"({build_field_query('Front', term)} OR {build_field_query('Back', term)})"
         card_ids = invoke("findCards", query=query) or []
         if not card_ids:
-            return jsonify({"ok": True, "results": []})
+            return jsonify({"ok": True, "results": [], "source": "anki"})
 
         card_ids = card_ids[:limit]
         cards = invoke("cardsInfo", cards=card_ids) or []
@@ -701,8 +1015,55 @@ def deck_search():
                 }
             )
 
-        return jsonify({"ok": True, "results": results})
+        return jsonify({"ok": True, "results": results, "source": "anki"})
     except Exception as exc:
+        if mode != "sqlite":
+            try:
+                query = f"({build_field_query('Front', term)} OR {build_field_query('Back', term)})"
+                card_ids = invoke("findCards", query=query) or []
+                card_ids = card_ids[:limit]
+                cards = invoke("cardsInfo", cards=card_ids) if card_ids else []
+                deck_by_note: dict[int, str] = {}
+                note_ids: list[int] = []
+                for card in cards:
+                    note_id = card.get("note")
+                    if not note_id:
+                        continue
+                    if note_id not in deck_by_note:
+                        deck_by_note[note_id] = card.get("deckName") or "Unknown"
+                    note_ids.append(note_id)
+                unique_note_ids = list(dict.fromkeys(note_ids))
+                notes = invoke("notesInfo", notes=unique_note_ids) if unique_note_ids else []
+                results = []
+                term_lower = term.lower()
+                for note_id, note in zip(unique_note_ids, notes):
+                    fields = note.get("fields", {})
+                    front = clean_field_text((fields.get("Front") or {}).get("value", ""))
+                    back = clean_field_text((fields.get("Back") or {}).get("value", ""))
+                    romanized = clean_field_text((fields.get("Romanized") or {}).get("value", ""))
+                    in_front = term_lower in front.lower()
+                    in_back = term_lower in back.lower()
+                    if in_front and in_back:
+                        match = "both"
+                    elif in_front:
+                        match = "front"
+                    elif in_back:
+                        match = "back"
+                    else:
+                        match = ""
+                    results.append(
+                        {
+                            "id": note_id,
+                            "deck": deck_by_note.get(note_id, "Unknown"),
+                            "front": front,
+                            "back": back,
+                            "romanized": romanized,
+                            "match": match,
+                        }
+                    )
+                return jsonify({"ok": True, "results": results, "source": "anki"})
+            except Exception:
+                pass
         return jsonify({"ok": False, "message": str(exc)}), 500
 
 
@@ -842,18 +1203,18 @@ def media_file():
     if not filename:
         return jsonify({"ok": False, "message": "filename parameter is required."}), 400
     try:
-        data = invoke("retrieveMediaFile", filename=filename)
+        local_path = resolve_local_media_file(filename)
+        if local_path and local_path.exists():
+            guessed, _ = mimetypes.guess_type(local_path.name)
+            mimetype = guessed or "application/octet-stream"
+            return send_from_directory(local_path.parent, local_path.name, mimetype=mimetype)
+
+        data = invoke("retrieveMediaFile", filename=Path(filename).name)
         if not data:
             return jsonify({"ok": False, "message": "Media not found."}), 404
         payload = base64.b64decode(data)
-        if filename.lower().endswith(".mp3"):
-            mimetype = "audio/mpeg"
-        elif filename.lower().endswith(".wav"):
-            mimetype = "audio/wav"
-        elif filename.lower().endswith(".ogg"):
-            mimetype = "audio/ogg"
-        else:
-            mimetype = "application/octet-stream"
+        guessed, _ = mimetypes.guess_type(filename)
+        mimetype = guessed or "application/octet-stream"
         return app.response_class(payload, mimetype=mimetype)
     except Exception as exc:
         return jsonify({"ok": False, "message": str(exc)}), 500

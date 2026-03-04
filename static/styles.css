@@ -297,10 +297,12 @@ button:not(:disabled):hover {
 }
 
 .study-card img {
-    width: min(280px, 100%);
-    height: 180px;
-    object-fit: cover;
+    width: min(560px, 100%);
+    max-height: min(50vh, 420px);
+    height: auto;
+    object-fit: contain;
     border-radius: 8px;
+    background: rgba(15, 23, 42, 0.35);
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.35);
 }
 
@@ -534,7 +536,8 @@ button:not(:disabled):hover {
 .image-card img {
     width: 100%;
     height: 180px;
-    object-fit: cover;
+    object-fit: contain;
+    background: rgba(15, 23, 42, 0.25);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.4);
 }

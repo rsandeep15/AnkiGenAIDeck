@@ -60,6 +60,7 @@ let studyShowBack = false;
 let studyFullscreen = false;
 let currentPlayingAudio = null;
 const SEARCH_DEBOUNCE_MS = 300;
+const READ_SOURCE = "sqlite";
 
 function setStatus(element, message, append = false) {
     if (!element) return;
@@ -68,6 +69,11 @@ function setStatus(element, message, append = false) {
     } else {
         element.textContent = message;
     }
+}
+
+function withReadSource(path) {
+    const separator = path.includes("?") ? "&" : "?";
+    return `${path}${separator}source=${encodeURIComponent(READ_SOURCE)}`;
 }
 
 function appendStatus(element, message) {
@@ -311,7 +317,7 @@ async function loadDecks() {
         renderChatThread();
     }
     try {
-        const response = await fetch("/api/decks");
+        const response = await fetch(withReadSource("/api/decks"));
         const data = await response.json();
         if (data.ok && Array.isArray(data.decks) && data.decks.length) {
             selects.forEach((select) => populateDeckSelect(select, data.decks));
@@ -468,7 +474,7 @@ async function loadStudyCards() {
         return;
     }
     try {
-        const response = await fetch(`/api/deck-cards?deck=${encodeURIComponent(deck)}`);
+        const response = await fetch(withReadSource(`/api/deck-cards?deck=${encodeURIComponent(deck)}`));
         const data = await response.json();
         if (!response.ok || !data.ok) {
             throw new Error(data.message || "Failed to load deck cards.");
@@ -928,7 +934,7 @@ async function loadGallery() {
     setStatus(statusLogGallery, `Loading cards for "${deck}"${term ? ` (filter: "${term}")` : ""}...`);
     try {
         const response = await fetch(
-            `/api/deck-gallery?deck=${encodeURIComponent(deck)}&term=${encodeURIComponent(term)}&page=${galleryPage}&page_size=${getGalleryPageSize()}`
+            withReadSource(`/api/deck-gallery?deck=${encodeURIComponent(deck)}&term=${encodeURIComponent(term)}&page=${galleryPage}&page_size=${getGalleryPageSize()}`)
         );
         const data = await response.json();
         if (!response.ok || !data.ok) {
