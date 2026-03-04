@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anki Deck Studio</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='20260304-3') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='20260304-4') }}">
 </head>
 <body>
     <main class="container">
@@ -93,6 +93,12 @@
                     <h2>Study Mode</h2>
                     <span id="studyCounter" class="panel-note">0 / 0</span>
                 </div>
+                <div class="study-deck-row">
+                    <label for="studyDeckSelect" class="sr-only">Study deck</label>
+                    <select id="studyDeckSelect">
+                        <option value="">Loading decks...</option>
+                    </select>
+                </div>
                 <div id="studyCard" class="study-card empty" tabindex="0">
                     <p>Select a deck to start studying.</p>
                 </div>
@@ -101,7 +107,7 @@
                     <button id="studyShuffle" class="secondary-button" disabled>Shuffle</button>
                     <button id="studyFullscreen" class="secondary-button" disabled>Full Screen</button>
                 </div>
-                <p class="panel-note">Keyboard: Space to flip, Left/Right arrows to move cards, Esc to exit full screen.</p>
+                <p class="panel-note">Tap card to flip. Swipe left/right (mobile) or use Left/Right arrows (desktop). Esc exits full screen.</p>
             </section>
 
             <section class="status-panel">
@@ -158,6 +164,6 @@
 
     </main>
 
-    <script src="{{ url_for('static', filename='app.js', v='20260304-3') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='20260304-4') }}"></script>
 </body>
 </html>

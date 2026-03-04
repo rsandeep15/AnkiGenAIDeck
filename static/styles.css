@@ -261,6 +261,15 @@ button:not(:disabled):hover {
     gap: 0.75rem;
 }
 
+.study-deck-row select {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #f8fafc;
+    color: var(--text);
+}
+
 .study-card {
     height: clamp(320px, 52vh, 560px);
     border-radius: 12px;
@@ -588,6 +597,62 @@ button:not(:disabled):hover {
     .study-controls {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .container {
+        padding: 1rem 0.75rem;
+        gap: 1rem;
+    }
+    .tabs {
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .tab-button {
+        flex: 1 1 auto;
+        min-width: 120px;
+    }
+    .study-panel {
+        margin: 0.25rem 0 0.5rem;
+        padding: 0.75rem;
+        gap: 0.6rem;
+    }
+    .study-deck-row select {
+        padding: 0.7rem 0.75rem;
+    }
+    .study-card {
+        height: clamp(320px, 58vh, 520px);
+        padding: 0.85rem;
+        border-radius: 10px;
+    }
+    .study-main-text {
+        font-size: clamp(1.6rem, 7vw, 2.1rem);
+        line-height: 1.35;
+    }
+    .study-card img {
+        width: min(520px, 100%);
+        max-height: min(38vh, 280px);
+    }
+    .study-controls .secondary-button {
+        min-height: 48px;
+        font-size: 0.98rem;
+        font-weight: 700;
+    }
+    .panel-note {
+        font-size: 0.82rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .study-controls {
+        grid-template-columns: 1fr;
+    }
+    .study-card {
+        height: clamp(300px, 56vh, 480px);
+    }
+    .study-main-text {
+        font-size: clamp(1.45rem, 7.5vw, 1.9rem);
+    }
+    .study-card img {
+        max-height: min(34vh, 230px);
+    }
 }
 
 body.study-fullscreen {
@@ -779,6 +844,12 @@ body.study-fullscreen .study-panel.is-fullscreen .study-main-text {
 
     .study-panel {
         background: rgba(15, 23, 42, 0.55);
+        border-color: #1f2937;
+    }
+
+    .study-deck-row select {
+        background: #111827;
+        color: var(--text);
         border-color: #1f2937;
     }
 

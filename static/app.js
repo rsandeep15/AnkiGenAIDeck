@@ -31,6 +31,7 @@ const browserSearchTerm = document.getElementById("browserSearchTerm");
 const statusLogSearch = document.getElementById("statusLogSearch");
 const studyCard = document.getElementById("studyCard");
 const studyPanel = document.querySelector(".study-panel");
+const studyDeckSelect = document.getElementById("studyDeckSelect");
 const studyCounter = document.getElementById("studyCounter");
 const studyFlipButton = document.getElementById("studyFlip");
 const studyShuffleButton = document.getElementById("studyShuffle");
@@ -59,6 +60,8 @@ let studyIndex = 0;
 let studyShowBack = false;
 let studyFullscreen = false;
 let currentPlayingAudio = null;
+let touchStartX = null;
+let touchStartY = null;
 const SEARCH_DEBOUNCE_MS = 300;
 const READ_SOURCE = "sqlite";
 
@@ -302,7 +305,7 @@ function populateDeckSelect(select, decks) {
 }
 
 async function loadDecks() {
-    const selects = Array.from(new Set([audioDeckSelect, imageDeckSelect, chatDeckSelect]));
+    const selects = Array.from(new Set([audioDeckSelect, imageDeckSelect, chatDeckSelect, studyDeckSelect]));
     selects.forEach((select) => {
         if (select) {
             select.innerHTML = '<option value="">Loading decks...</option>';
@@ -712,6 +715,9 @@ imageModelSelect.addEventListener("change", updateImageControls);
 imageDeckSelect.addEventListener("change", updateImageCoverage);
 imageDeckSelect.addEventListener("change", () => {
     updateGalleryControls();
+    if (studyDeckSelect && studyDeckSelect.value !== imageDeckSelect.value) {
+        studyDeckSelect.value = imageDeckSelect.value;
+    }
     if (imageDeckSelect.value) {
         galleryPage = 1;
         loadGallery();
@@ -723,6 +729,19 @@ imageDeckSelect.addEventListener("change", () => {
         loadStudyCards();
     }
 });
+if (studyDeckSelect) {
+    studyDeckSelect.addEventListener("change", () => {
+        if (imageDeckSelect && imageDeckSelect.value !== studyDeckSelect.value) {
+            imageDeckSelect.value = studyDeckSelect.value;
+            updateImageControls();
+            updateImageCoverage();
+            updateAudioCoverage();
+        }
+        galleryPage = 1;
+        loadGallery();
+        loadStudyCards();
+    });
+}
 
 if (galleryPrevButton) {
     galleryPrevButton.addEventListener("click", () => {
@@ -786,6 +805,31 @@ if (studyCard) {
         studyShowBack = !studyShowBack;
         renderStudyCard();
     });
+    studyCard.addEventListener("touchstart", (event) => {
+        const touch = event.touches?.[0];
+        if (!touch) return;
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+    }, { passive: true });
+    studyCard.addEventListener("touchend", (event) => {
+        if (!studyFilteredCards.length) return;
+        const touch = event.changedTouches?.[0];
+        if (!touch || touchStartX === null || touchStartY === null) return;
+        const dx = touch.clientX - touchStartX;
+        const dy = touch.clientY - touchStartY;
+        touchStartX = null;
+        touchStartY = null;
+        if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) {
+            return;
+        }
+        if (dx < 0) {
+            studyIndex = (studyIndex + 1) % studyFilteredCards.length;
+        } else {
+            studyIndex = (studyIndex - 1 + studyFilteredCards.length) % studyFilteredCards.length;
+        }
+        studyShowBack = false;
+        renderStudyCard();
+    }, { passive: true });
 }
 if (studyFlipButton) {
     studyFlipButton.addEventListener("click", () => {
