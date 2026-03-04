@@ -887,13 +887,20 @@ if (studyFullscreenButton) {
             document.exitFullscreen?.();
             return;
         }
-        studyPanel.requestFullscreen?.().catch(() => {
-            // Fallback for environments where Fullscreen API is blocked.
+        const fallbackFullscreen = () => {
+            // Fallback for environments where Fullscreen API is unavailable/blocked (common on mobile).
             studyFullscreen = !studyFullscreen;
             studyPanel.classList.toggle("is-fullscreen", studyFullscreen);
             document.body.classList.toggle("study-fullscreen", studyFullscreen);
             updateStudyControls();
-        });
+        };
+        if (typeof studyPanel.requestFullscreen === "function") {
+            studyPanel.requestFullscreen().catch(() => {
+                fallbackFullscreen();
+            });
+            return;
+        }
+        fallbackFullscreen();
     });
 }
 
