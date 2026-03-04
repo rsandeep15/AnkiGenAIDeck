@@ -33,6 +33,7 @@ const studyCard = document.getElementById("studyCard");
 const studyPanel = document.querySelector(".study-panel");
 const studyDeckSelect = document.getElementById("studyDeckSelect");
 const studyCounter = document.getElementById("studyCounter");
+const studyEnableSoundButton = document.getElementById("studyEnableSound");
 const studyFullscreenButton = document.getElementById("studyFullscreen");
 const chatDeckSelect = document.getElementById("chatDeckSelect");
 const refreshDecksChat = document.getElementById("refreshDecksChat");
@@ -58,6 +59,7 @@ let studyIndex = 0;
 let studyShowBack = false;
 let studyFullscreen = false;
 let currentPlayingAudio = null;
+let studyAudioUnlocked = false;
 let touchStartX = null;
 let touchStartY = null;
 let justSwiped = false;
@@ -411,12 +413,54 @@ function escapeHtml(value) {
         .replace(/>/g, "&gt;");
 }
 
+async function unlockStudyAudio() {
+    try {
+        if (studyAudioUnlocked) return true;
+        if (!currentPlayingAudio) {
+            currentPlayingAudio = new Audio();
+            currentPlayingAudio.preload = "auto";
+        }
+        const audio = currentPlayingAudio;
+        audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+        audio.muted = true;
+        await audio.play();
+        audio.pause();
+        audio.currentTime = 0;
+        audio.muted = false;
+        audio.removeAttribute("src");
+        audio.load();
+        studyAudioUnlocked = true;
+        updateStudyControls();
+        return true;
+    } catch (error) {
+        studyAudioUnlocked = false;
+        updateStudyControls();
+        console.warn("Audio unlock blocked", error);
+        return false;
+    }
+}
+
 function updateStudyControls() {
     const hasCards = studyFilteredCards.length > 0;
     if (studyCounter) {
         studyCounter.textContent = hasCards ? `${studyIndex + 1} / ${studyFilteredCards.length}` : "0 / 0";
     }
-    if (studyFullscreenButton) {
+    if (studyEnableSoundButton) {
+        studyEnableSoundButton.disabled = !hasCards;
+        studyEnableSoundButton.textContent = studyAudioUnlocked ? "Sound On" : "Enable Sound";
+    }
+    if (studyEnableSoundButton) {
+    studyEnableSoundButton.addEventListener("click", async () => {
+        await unlockStudyAudio();
+        if (studyAudioUnlocked && studyFilteredCards.length) {
+            const card = studyFilteredCards[studyIndex];
+            if (!studyShowBack && card?.sound_filename) {
+                playAudioFilename(card.sound_filename);
+            }
+        }
+    });
+}
+if (studyFullscreenButton) {
         studyFullscreenButton.disabled = !hasCards;
         studyFullscreenButton.textContent = studyFullscreen ? "Exit Full Screen" : "Full Screen";
     }
@@ -799,6 +843,9 @@ if (chatAskButton) {
 if (studyCard) {
     studyCard.addEventListener("click", () => {
         if (!studyFilteredCards.length) return;
+        if (!studyAudioUnlocked) {
+            unlockStudyAudio();
+        }
         if (justSwiped) {
             justSwiped = false;
             return;
@@ -836,6 +883,9 @@ if (studyCard) {
 }
 document.addEventListener("keydown", (event) => {
     if (!studyFilteredCards.length) return;
+    if (!studyAudioUnlocked) {
+        unlockStudyAudio();
+    }
     const isTyping = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName || "");
     if (isTyping) return;
     if (event.key === " ") {
@@ -864,6 +914,17 @@ document.addEventListener("keydown", (event) => {
         updateStudyControls();
     }
 });
+if (studyEnableSoundButton) {
+    studyEnableSoundButton.addEventListener("click", async () => {
+        await unlockStudyAudio();
+        if (studyAudioUnlocked && studyFilteredCards.length) {
+            const card = studyFilteredCards[studyIndex];
+            if (!studyShowBack && card?.sound_filename) {
+                playAudioFilename(card.sound_filename);
+            }
+        }
+    });
+}
 if (studyFullscreenButton) {
     studyFullscreenButton.addEventListener("click", () => {
         if (!studyPanel) return;
@@ -922,24 +983,22 @@ function renderGallery(items) {
 }
 
 async function playAudioFilename(filename) {
-    if (!filename) return;
+    if (!filename || !studyAudioUnlocked) return;
     try {
-        if (currentPlayingAudio) {
-            currentPlayingAudio.pause();
-            currentPlayingAudio.currentTime = 0;
-            currentPlayingAudio = null;
+        if (!currentPlayingAudio) {
+            currentPlayingAudio = new Audio();
+            currentPlayingAudio.preload = "auto";
         }
-        const url = `/api/media?filename=${encodeURIComponent(filename)}`;
-        const audio = new Audio(url);
-        currentPlayingAudio = audio;
-        audio.preload = "auto";
-        audio.addEventListener("ended", () => {
-            if (currentPlayingAudio === audio) {
-                currentPlayingAudio = null;
-            }
-        });
+        const audio = currentPlayingAudio;
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = `/api/media?filename=${encodeURIComponent(filename)}`;
         await audio.play();
     } catch (error) {
+        if (String(error?.name || "").includes("NotAllowed")) {
+            studyAudioUnlocked = false;
+            updateStudyControls();
+        }
         console.error("Failed to play audio", error);
     }
 }

@@ -338,7 +338,7 @@ button:not(:disabled):hover {
 
 .study-controls {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.45rem;
 }
 
@@ -685,6 +685,9 @@ button:not(:disabled):hover {
 }
 
 @media (max-width: 480px) {
+    .study-controls {
+        grid-template-columns: 1fr;
+    }
     .study-card {
         height: clamp(300px, 56vh, 480px);
     }
