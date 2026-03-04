@@ -447,19 +447,8 @@ function updateStudyControls() {
     }
     if (studyEnableSoundButton) {
         studyEnableSoundButton.disabled = !hasCards;
-        studyEnableSoundButton.textContent = studyAudioUnlocked ? "Sound On" : "Enable Sound";
+        studyEnableSoundButton.textContent = "Play Audio";
     }
-    if (studyEnableSoundButton) {
-    studyEnableSoundButton.addEventListener("click", async () => {
-        await unlockStudyAudio();
-        if (studyAudioUnlocked && studyFilteredCards.length) {
-            const card = studyFilteredCards[studyIndex];
-            if (!studyShowBack && card?.sound_filename) {
-                playAudioFilename(card.sound_filename);
-            }
-        }
-    });
-}
 if (studyFullscreenButton) {
         studyFullscreenButton.disabled = !hasCards;
         studyFullscreenButton.textContent = studyFullscreen ? "Exit Full Screen" : "Full Screen";
@@ -487,9 +476,6 @@ function renderStudyCard() {
         ${imageHtml}
     `;
     updateStudyControls();
-    if (!studyShowBack && card.sound_filename) {
-        playAudioFilename(card.sound_filename);
-    }
 }
 
 function applyStudyFilter() {
@@ -843,9 +829,6 @@ if (chatAskButton) {
 if (studyCard) {
     studyCard.addEventListener("click", () => {
         if (!studyFilteredCards.length) return;
-        if (!studyAudioUnlocked) {
-            unlockStudyAudio();
-        }
         if (justSwiped) {
             justSwiped = false;
             return;
@@ -883,9 +866,6 @@ if (studyCard) {
 }
 document.addEventListener("keydown", (event) => {
     if (!studyFilteredCards.length) return;
-    if (!studyAudioUnlocked) {
-        unlockStudyAudio();
-    }
     const isTyping = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName || "");
     if (isTyping) return;
     if (event.key === " ") {
@@ -916,12 +896,12 @@ document.addEventListener("keydown", (event) => {
 });
 if (studyEnableSoundButton) {
     studyEnableSoundButton.addEventListener("click", async () => {
+        if (!studyFilteredCards.length) return;
+        const card = studyFilteredCards[studyIndex];
+        if (!card?.sound_filename) return;
         await unlockStudyAudio();
-        if (studyAudioUnlocked && studyFilteredCards.length) {
-            const card = studyFilteredCards[studyIndex];
-            if (!studyShowBack && card?.sound_filename) {
-                playAudioFilename(card.sound_filename);
-            }
+        if (studyAudioUnlocked) {
+            playAudioFilename(card.sound_filename);
         }
     });
 }
