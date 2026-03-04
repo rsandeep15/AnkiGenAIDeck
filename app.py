@@ -413,7 +413,8 @@ def should_use_sqlite(mode: str) -> bool:
 
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("index.html")
+    asset_version = int(time.time())
+    return render_template("index.html", asset_version=asset_version)
 
 
 @app.route("/api/decks", methods=["GET"])

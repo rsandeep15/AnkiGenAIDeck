@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anki Deck Studio</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='20260304-5') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=asset_version) }}">
 </head>
 <body>
     <main class="container">
@@ -165,6 +165,6 @@
 
     </main>
 
-    <script src="{{ url_for('static', filename='app.js', v='20260304-5') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v=asset_version) }}"></script>
 </body>
 </html>
