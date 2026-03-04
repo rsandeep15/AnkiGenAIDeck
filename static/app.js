@@ -60,6 +60,7 @@ let studyFullscreen = false;
 let currentPlayingAudio = null;
 let touchStartX = null;
 let touchStartY = null;
+let justSwiped = false;
 const SEARCH_DEBOUNCE_MS = 300;
 const READ_SOURCE = "sqlite";
 
@@ -796,6 +797,15 @@ if (chatAskButton) {
     chatAskButton.addEventListener("click", askDeck);
 }
 if (studyCard) {
+    studyCard.addEventListener("click", () => {
+        if (!studyFilteredCards.length) return;
+        if (justSwiped) {
+            justSwiped = false;
+            return;
+        }
+        studyShowBack = !studyShowBack;
+        renderStudyCard();
+    });
     studyCard.addEventListener("touchstart", (event) => {
         const touch = event.touches?.[0];
         if (!touch) return;
@@ -811,8 +821,10 @@ if (studyCard) {
         touchStartX = null;
         touchStartY = null;
         if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) {
+            justSwiped = false;
             return;
         }
+        justSwiped = true;
         if (dx < 0) {
             studyIndex = (studyIndex + 1) % studyFilteredCards.length;
         } else {
@@ -826,7 +838,11 @@ document.addEventListener("keydown", (event) => {
     if (!studyFilteredCards.length) return;
     const isTyping = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName || "");
     if (isTyping) return;
-    if (event.key === "ArrowRight") {
+    if (event.key === " ") {
+        event.preventDefault();
+        studyShowBack = !studyShowBack;
+        renderStudyCard();
+    } else if (event.key === "ArrowRight") {
         event.preventDefault();
         studyIndex = (studyIndex + 1) % studyFilteredCards.length;
         studyShowBack = false;
