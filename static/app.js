@@ -929,22 +929,16 @@ async function playAudioFilename(filename) {
             currentPlayingAudio.currentTime = 0;
             currentPlayingAudio = null;
         }
-        const response = await fetch(`/api/media?filename=${encodeURIComponent(filename)}`);
-        if (!response.ok) {
-            throw new Error("Audio not found.");
-        }
-        const buffer = await response.arrayBuffer();
-        const blob = new Blob([buffer], { type: response.headers.get("Content-Type") || "audio/mpeg" });
-        const url = URL.createObjectURL(blob);
+        const url = `/api/media?filename=${encodeURIComponent(filename)}`;
         const audio = new Audio(url);
         currentPlayingAudio = audio;
+        audio.preload = "auto";
         audio.addEventListener("ended", () => {
-            URL.revokeObjectURL(url);
             if (currentPlayingAudio === audio) {
                 currentPlayingAudio = null;
             }
         });
-        audio.play();
+        await audio.play();
     } catch (error) {
         console.error("Failed to play audio", error);
     }
