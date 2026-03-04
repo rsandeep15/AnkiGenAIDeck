@@ -33,8 +33,6 @@ const studyCard = document.getElementById("studyCard");
 const studyPanel = document.querySelector(".study-panel");
 const studyDeckSelect = document.getElementById("studyDeckSelect");
 const studyCounter = document.getElementById("studyCounter");
-const studyFlipButton = document.getElementById("studyFlip");
-const studyShuffleButton = document.getElementById("studyShuffle");
 const studyFullscreenButton = document.getElementById("studyFullscreen");
 const chatDeckSelect = document.getElementById("chatDeckSelect");
 const refreshDecksChat = document.getElementById("refreshDecksChat");
@@ -417,8 +415,6 @@ function updateStudyControls() {
     if (studyCounter) {
         studyCounter.textContent = hasCards ? `${studyIndex + 1} / ${studyFilteredCards.length}` : "0 / 0";
     }
-    if (studyFlipButton) studyFlipButton.disabled = !hasCards;
-    if (studyShuffleButton) studyShuffleButton.disabled = !hasCards;
     if (studyFullscreenButton) {
         studyFullscreenButton.disabled = !hasCards;
         studyFullscreenButton.textContent = studyFullscreen ? "Exit Full Screen" : "Full Screen";
@@ -435,8 +431,8 @@ function renderStudyCard() {
     }
 
     const card = studyFilteredCards[studyIndex];
-    const mainText = studyShowBack ? card.back : card.front;
-    const imageHtml = studyShowBack && card.has_image && card.image_url
+    const mainText = card.front;
+    const imageHtml = card.has_image && card.image_url
         ? `<img src="${card.image_url}" alt="${escapeHtml(card.front)}" loading="lazy" />`
         : "";
 
@@ -446,7 +442,7 @@ function renderStudyCard() {
         ${imageHtml}
     `;
     updateStudyControls();
-    if (!studyShowBack && card.sound_filename) {
+    if (card.sound_filename) {
         playAudioFilename(card.sound_filename);
     }
 }
@@ -800,11 +796,6 @@ if (chatAskButton) {
     chatAskButton.addEventListener("click", askDeck);
 }
 if (studyCard) {
-    studyCard.addEventListener("click", () => {
-        if (!studyFilteredCards.length) return;
-        studyShowBack = !studyShowBack;
-        renderStudyCard();
-    });
     studyCard.addEventListener("touchstart", (event) => {
         const touch = event.touches?.[0];
         if (!touch) return;
@@ -831,34 +822,11 @@ if (studyCard) {
         renderStudyCard();
     }, { passive: true });
 }
-if (studyFlipButton) {
-    studyFlipButton.addEventListener("click", () => {
-        if (!studyFilteredCards.length) return;
-        studyShowBack = !studyShowBack;
-        renderStudyCard();
-    });
-}
-if (studyShuffleButton) {
-    studyShuffleButton.addEventListener("click", () => {
-        if (studyFilteredCards.length < 2) return;
-        for (let i = studyFilteredCards.length - 1; i > 0; i -= 1) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [studyFilteredCards[i], studyFilteredCards[j]] = [studyFilteredCards[j], studyFilteredCards[i]];
-        }
-        studyIndex = 0;
-        studyShowBack = false;
-        renderStudyCard();
-    });
-}
 document.addEventListener("keydown", (event) => {
     if (!studyFilteredCards.length) return;
     const isTyping = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName || "");
     if (isTyping) return;
-    if (event.key === " ") {
-        event.preventDefault();
-        studyShowBack = !studyShowBack;
-        renderStudyCard();
-    } else if (event.key === "ArrowRight") {
+    if (event.key === "ArrowRight") {
         event.preventDefault();
         studyIndex = (studyIndex + 1) % studyFilteredCards.length;
         studyShowBack = false;
