@@ -59,7 +59,9 @@ let studyIndex = 0;
 let studyShowBack = false;
 let studyFullscreen = false;
 let currentPlayingAudio = null;
-let studyAudioUnlocked = false;
+const isLikelyMobileDevice = window.matchMedia("(pointer: coarse)").matches
+    || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+let studyAudioUnlocked = !isLikelyMobileDevice;
 let touchStartX = null;
 let touchStartY = null;
 let justSwiped = false;
@@ -416,6 +418,11 @@ function escapeHtml(value) {
 async function unlockStudyAudio() {
     try {
         if (studyAudioUnlocked) return true;
+        if (!isLikelyMobileDevice) {
+            studyAudioUnlocked = true;
+            updateStudyControls();
+            return true;
+        }
         if (!currentPlayingAudio) {
             currentPlayingAudio = new Audio();
             currentPlayingAudio.preload = "auto";
@@ -442,14 +449,15 @@ async function unlockStudyAudio() {
 
 function updateStudyControls() {
     const hasCards = studyFilteredCards.length > 0;
+    const currentCard = hasCards ? studyFilteredCards[studyIndex] : null;
+    const hasCurrentAudio = Boolean(currentCard?.sound_filename);
     if (studyCounter) {
         studyCounter.textContent = hasCards ? `${studyIndex + 1} / ${studyFilteredCards.length}` : "0 / 0";
     }
     if (studyEnableSoundButton) {
-        studyEnableSoundButton.disabled = !hasCards;
-        studyEnableSoundButton.textContent = "Play Audio";
+        studyEnableSoundButton.disabled = !hasCurrentAudio;
     }
-if (studyFullscreenButton) {
+    if (studyFullscreenButton) {
         studyFullscreenButton.disabled = !hasCards;
         studyFullscreenButton.textContent = studyFullscreen ? "Exit Full Screen" : "Full Screen";
     }
@@ -476,6 +484,9 @@ function renderStudyCard() {
         ${imageHtml}
     `;
     updateStudyControls();
+    if (!studyShowBack && card.sound_filename && (!isLikelyMobileDevice || studyAudioUnlocked)) {
+        playAudioFilename(card.sound_filename);
+    }
 }
 
 function applyStudyFilter() {
@@ -960,7 +971,7 @@ function renderGallery(items) {
 }
 
 async function playAudioFilename(filename) {
-    if (!filename) return;
+    if (!filename || (isLikelyMobileDevice && !studyAudioUnlocked)) return;
     try {
         if (!currentPlayingAudio) {
             currentPlayingAudio = new Audio();
