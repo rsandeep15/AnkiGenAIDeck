@@ -432,8 +432,8 @@ function renderStudyCard() {
     }
 
     const card = studyFilteredCards[studyIndex];
-    const mainText = card.front;
-    const imageHtml = card.has_image && card.image_url
+    const mainText = studyShowBack ? card.back : card.front;
+    const imageHtml = studyShowBack && card.has_image && card.image_url
         ? `<img src="${card.image_url}" alt="${escapeHtml(card.front)}" loading="lazy" />`
         : "";
 
@@ -443,7 +443,7 @@ function renderStudyCard() {
         ${imageHtml}
     `;
     updateStudyControls();
-    if (card.sound_filename) {
+    if (!studyShowBack && card.sound_filename) {
         playAudioFilename(card.sound_filename);
     }
 }
