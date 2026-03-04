@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anki Deck Studio</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='20260304-4') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='20260304-5') }}">
 </head>
 <body>
     <main class="container">
@@ -89,15 +89,15 @@
             </div>
 
             <section class="status-panel study-panel">
-                <div class="panel-header">
+                <div class="study-toolbar">
                     <h2>Study Mode</h2>
-                    <span id="studyCounter" class="panel-note">0 / 0</span>
-                </div>
-                <div class="study-deck-row">
-                    <label for="studyDeckSelect" class="sr-only">Study deck</label>
-                    <select id="studyDeckSelect">
-                        <option value="">Loading decks...</option>
-                    </select>
+                    <div class="study-toolbar-controls">
+                        <label for="studyDeckSelect" class="sr-only">Study deck</label>
+                        <select id="studyDeckSelect">
+                            <option value="">Loading decks...</option>
+                        </select>
+                        <span id="studyCounter" class="panel-note">0 / 0</span>
+                    </div>
                 </div>
                 <div id="studyCard" class="study-card empty" tabindex="0">
                     <p>Select a deck to start studying.</p>
@@ -164,6 +164,6 @@
 
     </main>
 
-    <script src="{{ url_for('static', filename='app.js', v='20260304-4') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='20260304-5') }}"></script>
 </body>
 </html>
