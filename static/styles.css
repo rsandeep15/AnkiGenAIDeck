@@ -666,6 +666,22 @@ button:not(:disabled):hover {
         font-size: 0.98rem;
         font-weight: 700;
     }
+
+    body.study-fullscreen .study-panel.is-fullscreen {
+        padding: 0.6rem;
+        gap: 0.45rem;
+        grid-template-rows: auto auto auto auto;
+    }
+
+    body.study-fullscreen .study-panel.is-fullscreen .study-card {
+        height: clamp(280px, 52vh, 560px);
+        min-height: clamp(280px, 52vh, 560px);
+        padding: 1rem;
+    }
+
+    body.study-fullscreen .study-panel.is-fullscreen .study-main-text {
+        font-size: clamp(2.1rem, 8.3vw, 3rem);
+    }
     .panel-note {
         font-size: 0.82rem;
     }
@@ -712,7 +728,12 @@ body.study-fullscreen .study-panel.is-fullscreen .study-card {
 }
 
 body.study-fullscreen .study-panel.is-fullscreen .study-main-text {
-    font-size: clamp(1.6rem, 3.5vw, 2.8rem);
+    font-size: clamp(2rem, 4.2vw, 3.3rem);
+    line-height: 1.3;
+}
+
+body.study-fullscreen .study-panel.is-fullscreen .study-support-text {
+    font-size: clamp(1.1rem, 2.2vw, 1.5rem);
 }
 
 .study-panel:fullscreen,
