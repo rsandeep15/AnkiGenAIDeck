@@ -251,6 +251,69 @@ button:not(:disabled):hover {
     margin: 0.5rem 0 0.75rem;
 }
 
+.study-panel {
+    margin: 0.75rem 0 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(148, 163, 184, 0.08);
+    display: grid;
+    gap: 0.75rem;
+}
+
+.study-card {
+    min-height: 220px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 1rem;
+    display: grid;
+    gap: 0.75rem;
+    align-content: center;
+    justify-items: center;
+    text-align: center;
+    cursor: pointer;
+}
+
+.study-card.empty {
+    color: var(--muted);
+    cursor: default;
+}
+
+.study-main-text {
+    font-size: 1.45rem;
+    font-weight: 700;
+    line-height: 1.5;
+    max-width: 100%;
+    word-break: break-word;
+}
+
+.study-support-text {
+    font-size: 1rem;
+    color: var(--muted);
+    line-height: 1.5;
+    max-width: 100%;
+    word-break: break-word;
+}
+
+.study-card img {
+    width: min(280px, 100%);
+    height: 180px;
+    object-fit: cover;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.35);
+}
+
+.study-controls {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+
+.study-controls .secondary-button {
+    min-height: 42px;
+}
+
 .sr-only {
     position: absolute;
     width: 1px;
@@ -518,6 +581,61 @@ button:not(:disabled):hover {
     .dual-cta-row > button {
         flex-basis: 100%;
     }
+    .study-controls {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+body.study-fullscreen {
+    overflow: hidden;
+}
+
+body.study-fullscreen .study-panel.is-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    margin: 0;
+    border-radius: 0;
+    border: none;
+    padding: 1rem;
+    background: var(--bg);
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto 1fr auto auto;
+}
+
+body.study-fullscreen .study-panel.is-fullscreen .study-card {
+    min-height: 0;
+    height: 100%;
+    padding: 2rem;
+}
+
+body.study-fullscreen .study-panel.is-fullscreen .study-main-text {
+    font-size: clamp(1.6rem, 3.5vw, 2.8rem);
+}
+
+.study-panel:fullscreen,
+.study-panel:-webkit-full-screen {
+    margin: 0;
+    border-radius: 0;
+    border: none;
+    padding: 1rem;
+    background: var(--bg);
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto 1fr auto auto;
+}
+
+.study-panel:fullscreen .study-card,
+.study-panel:-webkit-full-screen .study-card {
+    min-height: 0;
+    height: 100%;
+    padding: 2rem;
+}
+
+.study-panel:fullscreen .study-main-text,
+.study-panel:-webkit-full-screen .study-main-text {
+    font-size: clamp(1.6rem, 3.5vw, 2.8rem);
 }
 
 .accent-button {
@@ -653,5 +771,15 @@ button:not(:disabled):hover {
         background: #111827;
         color: #cbd5f5;
         border: 1px solid #1f2937;
+    }
+
+    .study-panel {
+        background: rgba(15, 23, 42, 0.55);
+        border-color: #1f2937;
+    }
+
+    .study-card {
+        background: #0b1224;
+        border-color: #1f2937;
     }
 }

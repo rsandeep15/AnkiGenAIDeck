@@ -29,6 +29,12 @@ const galleryNextButton = document.getElementById("galleryNext");
 const galleryPageInfo = document.getElementById("galleryPageInfo");
 const browserSearchTerm = document.getElementById("browserSearchTerm");
 const statusLogSearch = document.getElementById("statusLogSearch");
+const studyCard = document.getElementById("studyCard");
+const studyPanel = document.querySelector(".study-panel");
+const studyCounter = document.getElementById("studyCounter");
+const studyFlipButton = document.getElementById("studyFlip");
+const studyShuffleButton = document.getElementById("studyShuffle");
+const studyFullscreenButton = document.getElementById("studyFullscreen");
 const chatDeckSelect = document.getElementById("chatDeckSelect");
 const refreshDecksChat = document.getElementById("refreshDecksChat");
 const chatModelSelect = document.getElementById("chatModelSelect");
@@ -47,6 +53,12 @@ let galleryPage = 1;
 let galleryTotal = 0;
 let chatHistory = [];
 let searchDebounceTimer = null;
+let studyCards = [];
+let studyFilteredCards = [];
+let studyIndex = 0;
+let studyShowBack = false;
+let studyFullscreen = false;
+let currentPlayingAudio = null;
 const SEARCH_DEBOUNCE_MS = 300;
 
 function setStatus(element, message, append = false) {
@@ -315,6 +327,7 @@ async function loadDecks() {
             if (imageDeckSelect?.value) {
                 galleryPage = 1;
                 loadGallery();
+                loadStudyCards();
             }
         } else {
             const message = data.message || "No decks found.";
@@ -381,6 +394,98 @@ function updateChatControls() {
     const hasModel = Boolean(chatModelSelect?.value);
     const hasQuestion = Boolean(chatQuestion?.value?.trim());
     chatAskButton.disabled = !(hasDeck && hasModel && hasQuestion);
+}
+
+function escapeHtml(value) {
+    return (value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
+function updateStudyControls() {
+    const hasCards = studyFilteredCards.length > 0;
+    if (studyCounter) {
+        studyCounter.textContent = hasCards ? `${studyIndex + 1} / ${studyFilteredCards.length}` : "0 / 0";
+    }
+    if (studyFlipButton) studyFlipButton.disabled = !hasCards;
+    if (studyShuffleButton) studyShuffleButton.disabled = !hasCards;
+    if (studyFullscreenButton) {
+        studyFullscreenButton.disabled = !hasCards;
+        studyFullscreenButton.textContent = studyFullscreen ? "Exit Full Screen" : "Full Screen";
+    }
+}
+
+function renderStudyCard() {
+    if (!studyCard) return;
+    if (!studyFilteredCards.length) {
+        studyCard.classList.add("empty");
+        studyCard.innerHTML = "<p>No cards match the current deck/filter.</p>";
+        updateStudyControls();
+        return;
+    }
+
+    const card = studyFilteredCards[studyIndex];
+    const mainText = studyShowBack ? card.back : card.front;
+    const imageHtml = studyShowBack && card.has_image && card.image_url
+        ? `<img src="${card.image_url}" alt="${escapeHtml(card.front)}" loading="lazy" />`
+        : "";
+
+    studyCard.classList.remove("empty");
+    studyCard.innerHTML = `
+        <div class="study-main-text">${escapeHtml(mainText)}</div>
+        ${imageHtml}
+    `;
+    updateStudyControls();
+    if (!studyShowBack && card.sound_filename) {
+        playAudioFilename(card.sound_filename);
+    }
+}
+
+function applyStudyFilter() {
+    const term = (browserSearchTerm?.value || "").trim().toLowerCase();
+    studyFilteredCards = studyCards.filter((card) => {
+        if (!term) return true;
+        return (
+            (card.front || "").toLowerCase().includes(term) ||
+            (card.back || "").toLowerCase().includes(term) ||
+            (card.romanized || "").toLowerCase().includes(term)
+        );
+    });
+    studyIndex = 0;
+    studyShowBack = false;
+    renderStudyCard();
+}
+
+async function loadStudyCards() {
+    const deck = imageDeckSelect?.value;
+    if (!deck) {
+        studyCards = [];
+        studyFilteredCards = [];
+        studyIndex = 0;
+        studyShowBack = false;
+        renderStudyCard();
+        return;
+    }
+    try {
+        const response = await fetch(`/api/deck-cards?deck=${encodeURIComponent(deck)}`);
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+            throw new Error(data.message || "Failed to load deck cards.");
+        }
+        studyCards = data.cards || [];
+        applyStudyFilter();
+    } catch (error) {
+        studyCards = [];
+        studyFilteredCards = [];
+        studyIndex = 0;
+        studyShowBack = false;
+        if (studyCard) {
+            studyCard.classList.add("empty");
+            studyCard.innerHTML = `<p>Unable to load study cards: ${escapeHtml(String(error))}</p>`;
+        }
+        updateStudyControls();
+    }
 }
 
 syncButton.addEventListener("click", async () => {
@@ -604,10 +709,12 @@ imageDeckSelect.addEventListener("change", () => {
     if (imageDeckSelect.value) {
         galleryPage = 1;
         loadGallery();
+        loadStudyCards();
     } else if (galleryGrid) {
         galleryGrid.classList.add("empty");
         galleryGrid.innerHTML = "<p>No deck selected.</p>";
         setStatus(statusLogSearch, "");
+        loadStudyCards();
     }
 });
 
@@ -667,6 +774,87 @@ if (chatQuestion) {
 if (chatAskButton) {
     chatAskButton.addEventListener("click", askDeck);
 }
+if (studyCard) {
+    studyCard.addEventListener("click", () => {
+        if (!studyFilteredCards.length) return;
+        studyShowBack = !studyShowBack;
+        renderStudyCard();
+    });
+}
+if (studyFlipButton) {
+    studyFlipButton.addEventListener("click", () => {
+        if (!studyFilteredCards.length) return;
+        studyShowBack = !studyShowBack;
+        renderStudyCard();
+    });
+}
+if (studyShuffleButton) {
+    studyShuffleButton.addEventListener("click", () => {
+        if (studyFilteredCards.length < 2) return;
+        for (let i = studyFilteredCards.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [studyFilteredCards[i], studyFilteredCards[j]] = [studyFilteredCards[j], studyFilteredCards[i]];
+        }
+        studyIndex = 0;
+        studyShowBack = false;
+        renderStudyCard();
+    });
+}
+document.addEventListener("keydown", (event) => {
+    if (!studyFilteredCards.length) return;
+    const isTyping = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName || "");
+    if (isTyping) return;
+    if (event.key === " ") {
+        event.preventDefault();
+        studyShowBack = !studyShowBack;
+        renderStudyCard();
+    } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        studyIndex = (studyIndex + 1) % studyFilteredCards.length;
+        studyShowBack = false;
+        renderStudyCard();
+    } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        studyIndex = (studyIndex - 1 + studyFilteredCards.length) % studyFilteredCards.length;
+        studyShowBack = false;
+        renderStudyCard();
+    } else if (event.key === "Escape" && studyFullscreen) {
+        event.preventDefault();
+        if (document.fullscreenElement) {
+            document.exitFullscreen?.();
+            return;
+        }
+        studyPanel?.classList.remove("is-fullscreen");
+        document.body.classList.remove("study-fullscreen");
+        studyFullscreen = false;
+        updateStudyControls();
+    }
+});
+if (studyFullscreenButton) {
+    studyFullscreenButton.addEventListener("click", () => {
+        if (!studyPanel) return;
+        if (document.fullscreenElement) {
+            document.exitFullscreen?.();
+            return;
+        }
+        studyPanel.requestFullscreen?.().catch(() => {
+            // Fallback for environments where Fullscreen API is blocked.
+            studyFullscreen = !studyFullscreen;
+            studyPanel.classList.toggle("is-fullscreen", studyFullscreen);
+            document.body.classList.toggle("study-fullscreen", studyFullscreen);
+            updateStudyControls();
+        });
+    });
+}
+
+document.addEventListener("fullscreenchange", () => {
+    studyFullscreen = Boolean(document.fullscreenElement && studyPanel && document.fullscreenElement === studyPanel);
+    if (!studyFullscreen) {
+        studyPanel?.classList.remove("is-fullscreen");
+        document.body.classList.remove("study-fullscreen");
+    }
+    updateStudyControls();
+});
 
 function renderGallery(items) {
     if (!galleryGrid) return;
@@ -692,10 +880,14 @@ function renderGallery(items) {
         .join("");
 }
 
-async function playAudioFromGallery(cardEl) {
-    const filename = cardEl?.dataset?.sound;
+async function playAudioFilename(filename) {
     if (!filename) return;
     try {
+        if (currentPlayingAudio) {
+            currentPlayingAudio.pause();
+            currentPlayingAudio.currentTime = 0;
+            currentPlayingAudio = null;
+        }
         const response = await fetch(`/api/media?filename=${encodeURIComponent(filename)}`);
         if (!response.ok) {
             throw new Error("Audio not found.");
@@ -704,7 +896,13 @@ async function playAudioFromGallery(cardEl) {
         const blob = new Blob([buffer], { type: response.headers.get("Content-Type") || "audio/mpeg" });
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
-        audio.addEventListener("ended", () => URL.revokeObjectURL(url));
+        currentPlayingAudio = audio;
+        audio.addEventListener("ended", () => {
+            URL.revokeObjectURL(url);
+            if (currentPlayingAudio === audio) {
+                currentPlayingAudio = null;
+            }
+        });
         audio.play();
     } catch (error) {
         console.error("Failed to play audio", error);
@@ -715,7 +913,7 @@ if (galleryGrid) {
     galleryGrid.addEventListener("click", (event) => {
         const card = event.target.closest(".image-card");
         if (!card) return;
-        playAudioFromGallery(card);
+        playAudioFilename(card?.dataset?.sound || "");
     });
 }
 
@@ -761,6 +959,7 @@ function getGalleryPageSize() {
 function applyBrowserFilter() {
     galleryPage = 1;
     loadGallery();
+    applyStudyFilter();
 }
 
 function queueSearch() {
@@ -793,6 +992,7 @@ updateImageControls();
 updateGalleryControls();
 updateAudioCoverage();
 updateImageCoverage();
+renderStudyCard();
 loadTabFromHash();
 updateChatControls();
 

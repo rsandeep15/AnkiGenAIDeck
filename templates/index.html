@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anki Deck Studio</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='20260304') }}">
 </head>
 <body>
     <main class="container">
@@ -88,6 +88,22 @@
                 </div>
             </div>
 
+            <section class="status-panel study-panel">
+                <div class="panel-header">
+                    <h2>Study Mode</h2>
+                    <span id="studyCounter" class="panel-note">0 / 0</span>
+                </div>
+                <div id="studyCard" class="study-card empty" tabindex="0">
+                    <p>Select a deck to start studying.</p>
+                </div>
+                <div class="study-controls">
+                    <button id="studyFlip" class="secondary-button" disabled>Flip</button>
+                    <button id="studyShuffle" class="secondary-button" disabled>Shuffle</button>
+                    <button id="studyFullscreen" class="secondary-button" disabled>Full Screen</button>
+                </div>
+                <p class="panel-note">Keyboard: Space to flip, Left/Right arrows to move cards, Esc to exit full screen.</p>
+            </section>
+
             <section class="status-panel">
                 <div class="panel-header">
                     <h2>Deck Gallery</h2>
@@ -95,7 +111,7 @@
                 </div>
                 <label for="browserSearchTerm" class="sr-only">Filter current deck</label>
                 <input id="browserSearchTerm" type="text" placeholder="Type to filter Front/Back">
-                <p id="statusLogSearch">Type to filter cards in the selected deck.</p>
+                <p id="statusLogSearch"></p>
                 <p id="statusLogGallery">Select a deck to view generated images.</p>
                 <div class="gallery-controls">
                     <button id="galleryPrev" class="secondary-button" disabled>Prev</button>
@@ -142,6 +158,6 @@
 
     </main>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='20260304') }}"></script>
 </body>
 </html>

@@ -597,15 +597,40 @@ def deck_cards():
         cards = []
         for note_id, note in zip(note_ids, notes):
             fields = note.get("fields", {})
-            front = clean_field_text((fields.get("Front") or {}).get("value", ""))
-            back = clean_field_text((fields.get("Back") or {}).get("value", ""))
+            front_raw = (fields.get("Front") or {}).get("value", "")
+            back_raw = (fields.get("Back") or {}).get("value", "")
+            front = clean_field_text(front_raw)
+            back = clean_field_text(back_raw)
             romanized = clean_field_text((fields.get("Romanized") or {}).get("value", ""))
+            front_image = extract_image_filename(front_raw)
+            back_image = extract_image_filename(back_raw)
+            filename = front_image or back_image
+            image_url = ""
+            if filename:
+                local_path = IMAGE_DIR / filename
+                if not local_path.exists():
+                    stem, suffix = os.path.splitext(filename)
+                    if "-" in stem:
+                        base = stem.split("-", 1)[0] + suffix
+                        alt_path = IMAGE_DIR / base
+                        if alt_path.exists():
+                            local_path = alt_path
+                        else:
+                            local_path = None
+                    else:
+                        local_path = None
+                if local_path and local_path.exists():
+                    image_url = url_for("serve_image_file", filename=local_path.name)
             cards.append(
                 {
                     "id": note_id,
                     "front": front,
                     "back": back,
                     "romanized": romanized,
+                    "has_image": bool(image_url),
+                    "image_url": image_url,
+                    "image_side": "Front" if front_image else ("Back" if back_image else ""),
+                    "sound_filename": extract_sound_filename(front_raw) or extract_sound_filename(back_raw),
                 }
             )
         return jsonify({"ok": True, "cards": cards})
