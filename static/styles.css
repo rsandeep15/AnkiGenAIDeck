@@ -262,7 +262,7 @@ button:not(:disabled):hover {
 }
 
 .study-card {
-    min-height: 220px;
+    height: clamp(320px, 52vh, 560px);
     border-radius: 12px;
     border: 1px solid var(--border);
     background: var(--surface);
@@ -273,6 +273,7 @@ button:not(:disabled):hover {
     justify-items: center;
     text-align: center;
     cursor: pointer;
+    overflow: hidden;
 }
 
 .study-card.empty {
@@ -298,7 +299,7 @@ button:not(:disabled):hover {
 
 .study-card img {
     width: min(560px, 100%);
-    max-height: min(50vh, 420px);
+    max-height: min(34vh, 300px);
     height: auto;
     object-fit: contain;
     border-radius: 8px;
