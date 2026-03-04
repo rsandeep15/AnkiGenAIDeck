@@ -455,7 +455,7 @@ function updateStudyControls() {
         studyCounter.textContent = hasCards ? `${studyIndex + 1} / ${studyFilteredCards.length}` : "0 / 0";
     }
     if (studyEnableSoundButton) {
-        studyEnableSoundButton.disabled = !hasCurrentAudio;
+        studyEnableSoundButton.disabled = !hasCards;
     }
     if (studyFullscreenButton) {
         studyFullscreenButton.disabled = !hasCards;
@@ -906,12 +906,16 @@ document.addEventListener("keydown", (event) => {
     }
 });
 if (studyEnableSoundButton) {
-    studyEnableSoundButton.addEventListener("click", async () => {
+    const playCurrentCardAudio = async (event) => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
         if (!studyFilteredCards.length) return;
         const card = studyFilteredCards[studyIndex];
         if (!card?.sound_filename) return;
         await playAudioFilename(card.sound_filename);
-    });
+    };
+    studyEnableSoundButton.addEventListener("click", playCurrentCardAudio);
+    studyEnableSoundButton.addEventListener("touchend", playCurrentCardAudio, { passive: false });
 }
 if (studyFullscreenButton) {
     studyFullscreenButton.addEventListener("click", () => {

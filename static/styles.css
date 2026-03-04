@@ -342,22 +342,24 @@ button:not(:disabled):hover {
 
 .study-audio-icon {
     position: absolute;
-    right: 0.7rem;
-    bottom: 0.7rem;
-    width: 2.1rem;
-    height: 2.1rem;
-    min-height: 2.1rem;
+    right: 0.8rem;
+    bottom: 0.8rem;
+    width: 3.2rem;
+    height: 3.2rem;
+    min-height: 3.2rem;
     padding: 0;
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.95rem;
+    font-size: 1.35rem;
     font-weight: 700;
     border: 1px solid var(--border);
-    background: rgba(15, 23, 42, 0.78);
+    background: rgba(15, 23, 42, 0.88);
     color: #e2e8f0;
-    z-index: 2;
+    z-index: 4;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .study-audio-icon:hover:not(:disabled) {
