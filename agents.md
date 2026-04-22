@@ -70,7 +70,7 @@ Common calls:
 ## Task Recipes (for agents)
 - **Sync a PDF**: `.venv/bin/python scripts/agent_tools.py sync --pdf path/to.pdf --deck "MyDeck" --model gpt-4.1-mini --romanized`
 - **Generate audio**: `.venv/bin/python scripts/agent_tools.py audio --deck "MyDeck" --model gpt-4o-mini-tts --voice onyx --workers 10`
-- **Generate images**: `.venv/bin/python scripts/agent_tools.py images --deck "MyDeck" --image-model gpt-image-1 --workers 3`
+- **Generate images**: `.venv/bin/python scripts/agent_tools.py images --deck "MyDeck" --image-model gpt-image-1 --workers 3 [--skip-gating]`
 - **Import manual card pairs**: `.venv/bin/python scripts/agent_tools.py cards-import --deck "MyDeck" --input pairs.json --front-key Front --back-key Back --dry-run`
 - **Evaluate image gating**: `.venv/bin/python scripts/agent_tools.py gating eval --dataset tmp/gating_labels.jsonl --mode prompt-ref --out-csv tmp/gating_outputs.csv`
 - **Hillclimb image gating**: `.venv/bin/python scripts/agent_tools.py gating hillclimb --dataset tmp/gating_labels.jsonl --seed-prompt prompts/image_gating_seed_prompt.txt --rounds 2 --branching 4 --keep-top 2`
