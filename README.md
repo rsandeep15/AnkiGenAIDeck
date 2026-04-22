@@ -1,13 +1,85 @@
-# Gen AI Anki Toolkit
+# PDF to Anki with OpenAI, AnkiConnect, Audio, and Images
 
-Streamline your language decks with a trio of OpenAI-powered helpers:
+Generate Anki vocabulary decks from PDFs, then add pronunciation audio and mnemonic images automatically.
 
-- `AnkiSync.py` turns vocab PDFs into fully-populated Anki decks.
-- `AnkiDeckToSpeech.py` adds natural-sounding audio pronunciations.
-- `AnkiDeckToImages.py` decorates cards with visual mnemonics.
-- `app.py` (optional) launches a local Flask UI for drag-and-drop syncing, media generation, and deck tutoring chat.
+This toolkit is built for language learners who want to turn lesson PDFs, vocab lists, or slides into richer Anki decks with:
 
-All scripts talk to a local AnkiConnect instance at `http://127.0.0.1:8765` and assume `OPENAI_API_KEY` is set in your shell.
+- PDF -> vocab extraction
+- automatic Anki deck creation via AnkiConnect
+- OpenAI text-to-speech pronunciation audio
+- OpenAI-generated mnemonic images
+- a local Flask UI for sync, media generation, gallery browsing, and deck chat
+
+All scripts talk to a local AnkiConnect instance at `http://127.0.0.1:8765` and assume `OPENAI_API_KEY` is available.
+
+## What This Repo Does
+
+- `AnkiSync.py`: extract vocab pairs from a PDF and create or update an Anki deck
+- `AnkiDeckToSpeech.py`: generate pronunciation audio for deck cards
+- `AnkiDeckToImages.py`: generate visual mnemonic images for easier memorization
+- `app.py`: local web UI for PDF upload, deck sync, audio, images, gallery browsing, and deck tutoring chat
+- `scripts/agent_tools.py`: agent-first wrapper CLI for standardized sync, audio, image, and dataset workflows
+
+## Why Use It
+
+- Avoid manual card entry from lesson PDFs or lecture slides
+- Add consistent pronunciation audio to vocab decks
+- Make cards easier to remember with concrete mnemonic images
+- Work from either the CLI or a local browser UI
+
+## Quickstart
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Create `.env`:
+
+```bash
+OPENAI_API_KEY=YOUR_KEY_HERE
+FLASK_APP=app.py
+```
+
+Make sure Anki is running with the AnkiConnect add-on enabled.
+
+Generate a deck from a PDF:
+
+```bash
+.venv/bin/python scripts/agent_tools.py sync \
+  --pdf /path/to/lesson.pdf \
+  --deck "Korean::Lesson 4 Vocab" \
+  --model gpt-4.1-mini \
+  --romanized
+```
+
+Add audio:
+
+```bash
+.venv/bin/python scripts/agent_tools.py audio \
+  --deck "Korean::Lesson 4 Vocab" \
+  --model gpt-4o-mini-tts \
+  --voice onyx
+```
+
+Add images:
+
+```bash
+.venv/bin/python scripts/agent_tools.py images \
+  --deck "Korean::Lesson 4 Vocab" \
+  --image-model gpt-image-1 \
+  --workers 3
+```
+
+Run the web UI:
+
+```bash
+source .venv/bin/activate
+flask run
+```
+
+Then open [http://127.0.0.1:5000/](http://127.0.0.1:5000/).
 
 ---
 
