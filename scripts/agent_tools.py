@@ -91,6 +91,8 @@ def cmd_images(args: argparse.Namespace) -> int:
         cmd_args.extend(["--limit", str(args.limit)])
     if args.shuffle:
         cmd_args.extend(["--shuffle", "--seed", str(args.seed)])
+    if args.skip_gating:
+        cmd_args.append("--skip-gating")
     if args.dry_run:
         cmd_args.append("--dry-run")
     return run_script("AnkiDeckToImages.py", cmd_args)
@@ -347,6 +349,11 @@ def build_parser() -> argparse.ArgumentParser:
     s_images.add_argument("--limit", type=int, default=0)
     s_images.add_argument("--shuffle", action="store_true")
     s_images.add_argument("--seed", type=int, default=42)
+    s_images.add_argument(
+        "--skip-gating",
+        action="store_true",
+        help="Generate images for every eligible card without the gating check.",
+    )
     s_images.add_argument("--dry-run", action="store_true")
     s_images.set_defaults(func=cmd_images)
 

@@ -21,7 +21,7 @@
     {
       "id": "generate_images_for_deck",
       "description": "Generate mnemonic images for deck cards via prompt-managed gating.",
-      "invoke": "python scripts/agent_tools.py images --deck <deck_name> --image-model <image_model> --workers <n> [--limit <n> --shuffle --seed <n>] [--dry-run]",
+      "invoke": "python scripts/agent_tools.py images --deck <deck_name> --image-model <image_model> --workers <n> [--limit <n> --shuffle --seed <n>] [--skip-gating] [--dry-run]",
       "backend_script": "AnkiDeckToImages.py"
     },
     {
